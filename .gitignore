@@ -1,3 +1,4 @@
+.vscode
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
@@ -9,7 +10,12 @@ cache
 Manifest.toml
 .ipynb_checkpoints
 # *.ipynb
-todo
+
+# simulations folder
+simulations/experiments/ps1b.jl
+simulations/studies/ps1b.jl
+simulations/results/*
+simulations/notebooks/*
 
 # Documentation
 docs/build/

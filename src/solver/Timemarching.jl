@@ -12,7 +12,6 @@ It returns the time derivative of the state vector `du`.
     changed, this can be because of callbacks or substeps of the ODE solver.
 getcurrentsys_nowall! is used to update the system state from `u` and `p`, without updating wall temperature.
 """
-
 function ODE_innertube(u,p,t)
 
     sys_init = p
@@ -32,28 +31,11 @@ function ODE_innertube(u,p,t)
 
 end
 
-# function ODE_steadyfilm(u,p,t)
-
-#     index_dynamics_end = findfirst(x->abs(x+1e10) <= 10^(-1), u)
-
-#     newsys = getcurrentsys_nowall!(u,p)
-
-#     dynamicsdu = dynamicsmodel_steadyfilm(u[1:index_dynamics_end-1],newsys)
-
-#     liquiddu = duliquidθtovec(liquidmodel(newsys))
-
-#     du = [dynamicsdu;liquiddu]
-
-#     return(du)
-
-# end
-
 """
     temperature_linesource(integrator_plate::ODEIntegrator)
 
 Get the temperature distribution on the plate from the plate integrator, to be used as wall temperature boundary condition for the tube system.
 """
-
 function temperature_linesource(integrator_plate::ODEIntegrator)
 
     T = ComputationalHeatTransfer.temperature(integrator_plate)
@@ -67,7 +49,6 @@ end
 Perform one time step of size `tstep` for both the tube and plate integrators, exchanging information between them.
 This is a Jacobi style weakly coupled alternate time marching (exchange info at the same time after each step)
 """
-
 function timemarching!(integrator_tube::ODEIntegrator,integrator_plate::ODEIntegrator,tstep::Float64; force_sequential::Bool=false)
 
     # initial exchange info at t=0

@@ -1,5 +1,4 @@
 export PHPSystem_nomapping,PHPSystem,Tube,Liquid,Vapor,Wall,PropConvert,Mapping,Cache
-# ,PHPResult
 
 using Parameters
 
@@ -12,7 +11,6 @@ Tube is a struct containing tube geometries
     g           ::Float64   gravity vector along the plate
     closedornot ::Bool      if the tube is closed loop or not (open loop)
 """
-
 struct Tube
     d::Float64
     peri::Float64
@@ -22,27 +20,6 @@ struct Tube
     closedornot::Bool
     N::Int64  
 end
-
-# function Tube(d,peri,Ac,L,gravity,closedornot,N);
-#     # PtoT,TtoP,PtoD,DtoP,PtoHfg = createCoolPropinterpolation(fluid_type::String)
-#     # Tube(d,peri,Ac,L,L2D,angle,gravity,closedornot,N,fluid_type,PtoT,TtoP,PtoD,DtoP,PtoHfg);
-#     # Tube(d,peri,Ac,L,gravity,closedornot,N,fluid_type,PtoT,TtoP,PtoD,DtoP,PtoHfg);
-#     Tube(d,peri,Ac,L,gravity,closedornot,N);
-# end
-
-"""
-Liquid is a struct containing liquid properties at a ref temperature
-    Hₗ::Float64                              heat transfer coefficient between the wall and the pure liquid slug
-    ρ::Float64                              liquid density
-    Cp::Float64                             liquid specific heat capacity
-    α::Float64                              liquid heat diffusivity
-    μₗ::Float64                              liquid dynamic viscosity
-    σ::Float64                              liquid surface tension
-    Xp::Array{Tuple{Float64,Float64},1}     interface locations for each liquid slug
-    dXdt::Array{Tuple{Float64,Float64},1}   bulk velocity for each liquid slug
-    Xarrays::Array{Array{Float64,1},1}      finite difference location points within each liquid slug
-    θarrays::Array{Array{Float64,1},1}      finite difference temperature points within each liquid slug
-"""
 
 struct PropConvert
     fluid_type::String
@@ -58,6 +35,19 @@ function PropConvert(fluid_type::String);
     PropConvert(fluid_type,PtoT,TtoP,PtoD,DtoP,PtoHfg);
 end
 
+"""
+Liquid is a struct containing liquid properties at a ref temperature
+    Hₗ::Float64                              heat transfer coefficient between the wall and the pure liquid slug
+    ρ::Float64                              liquid density
+    Cp::Float64                             liquid specific heat capacity
+    α::Float64                              liquid heat diffusivity
+    μₗ::Float64                              liquid dynamic viscosity
+    σ::Float64                              liquid surface tension
+    Xp::Array{Tuple{Float64,Float64},1}     interface locations for each liquid slug
+    dXdt::Array{Tuple{Float64,Float64},1}   bulk velocity for each liquid slug
+    Xarrays::Array{Array{Float64,1},1}      finite difference location points within each liquid slug
+    θarrays::Array{Array{Float64,1},1}      finite difference temperature points within each liquid slug
+"""
 mutable struct Liquid
     Hₗ::Float64
     ρₗ::Float64
@@ -69,7 +59,6 @@ mutable struct Liquid
     dXdt::Array{Tuple{Float64,Float64},1}
     Xarrays::Array{Array{Float64,1},1}
     θarrays::Array{Array{Float64,1},1}
-
 end
 
 """
@@ -81,7 +70,6 @@ Vapor is a struct containing vapor properties at a ref temperature
     δ::Array{Float64,1}     film thickness in each vapor
 end
 """
-
 @with_kw mutable struct Vapor
     ad_fac::Float64                 = 1.1
     Hᵥ::Float64                     = 0.0
@@ -104,7 +92,6 @@ Wall is a struct containing wall properties
     θarray::Array{Float64,1}        wall discrete temperature points for immersed boundary method
 end
 """
-
 @with_kw mutable struct Wall
     fluid_type::String
     boil_type::String
@@ -127,12 +114,6 @@ Mapping is a struct containing interpolation data
     H_interp_liquidtowall   heat transfer coefficient interpolation from OHP to wall
     P_interp_liquidtowall   pressure interpolation from OHP to wall
 """
-
-# mutable struct Mapping
-#     walltoliquid::Array{Tuple{Int64,Int64},1}
-#     liquidtowall::Array{Array{Int64,1},1}
-# end
-
 mutable struct Mapping
     θ_interp_walltoliquid    :: AbstractInterpolation
     curv_interp_walltoliquid :: AbstractInterpolation
@@ -146,7 +127,6 @@ end
 Cache is a struct containing
     boil_hist    ::Vector{Any}
 """
-
 mutable struct Cache
     boil_hist    ::Vector{Any}
     mass ::Float64
@@ -162,7 +142,6 @@ PHPSystem is a struct containing
     wall    ::Wall
     mapping ::Mapping
 """
-
 mutable struct PHPSystem <: AbstractPHP
     tube    ::Tube
     liquid  ::Liquid

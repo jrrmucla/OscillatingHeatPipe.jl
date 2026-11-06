@@ -152,6 +152,7 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
                                                         δfilm_relative=DEFAULT_DFILM_RELATIVE,
                                                         film_fraction=DEFAULT_FILM_FRACTION,
                                                         g = DEFAULT_G,
+                                                        g_potential_fn=getgh,
                                                         ηplus=DEFAULT_ETAPLUS,
                                                         ηminus=DEFAULT_ETAMINUS,
                                                         nucleatenum = DEFAULT_NUCLEATENUM,
@@ -204,8 +205,13 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     @unpack x,y = ohp.transform(ohp.shape)
     sys0_nomapping = PHPSystem_nomapping(tube,liquids,vapors,wall,propconvert);
     θ_interp_walltoliquid, curv_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall = sys_interpolation(sys0_nomapping)
-    ht = getgh(g,x,y);
+    
+    # Gravitational Potential (as a function of space and time)
+    # we require the mapping function's signiture ~ fn(g, x, y)
+    @assert applicable(g_potential_fn, g, x, y)
+    ht = g_potential_fn(g,x,y)
     heightg_interp = linear_interpolation(Xwallarray,ht,extrapolation_bc = Line())
+    
     mapping = Mapping(θ_interp_walltoliquid, curv_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall,heightg_interp);
 
     # Cache
@@ -259,8 +265,7 @@ function SimulationResult(tube_hist_t,tube_hist_u,tube_hist_θwall,boil_hist,pla
 end
 
 function SimulationResult(int_tube,int_plate)
-    
-    boil_hist= []
+    boil_hist = []
     plate_T_hist = []
     tube_hist_u  = []
     tube_hist_t = []
@@ -268,10 +273,7 @@ function SimulationResult(int_tube,int_plate)
     integrator_tube = deepcopy(int_tube)
     integrator_plate = deepcopy(int_plate)
 
-    # grid = int_plate.p.grid
-
     return SimulationResult(tube_hist_t,tube_hist_u,tube_hist_θwall,boil_hist,plate_T_hist,integrator_tube,integrator_plate)
-    # return SimulationResult(tube_hist_t,tube_hist_u,tube_hist_θwall,boil_hist,plate_T_hist,integrator_tube,integrator_plate,grid)
 end
 
 function store!(sr,integrator_tube,integrator_plate)

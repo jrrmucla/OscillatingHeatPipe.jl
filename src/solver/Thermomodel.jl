@@ -5,15 +5,12 @@ function dynamicsmodel(u::Array{Float64,1},p::PHPSystem)
     
     du = zeros(size(u))
 
-    # extracts essenstial information stored at sys::PHPSystem
+    # extracts essential information stored at sys::PHPSystem
     sys = p
     @unpack d,peri,Ac,g,L,closedornot = sys.tube
     @unpack σ,μₗ,ρₗ,Xp,dXdt = sys.liquid
-    # ρₗ = ρ
     @unpack P,Eratio_plus,Eratio_minus,δstart,δend,Lfilm_start,Lfilm_end,ad_fac = sys.vapor
     @unpack L_newbubble = sys.wall
-
-    # println(Xp)
 
     # number of liquid slugs
     numofliquidslug = length(Xp)
@@ -21,7 +18,7 @@ function dynamicsmodel(u::Array{Float64,1},p::PHPSystem)
     # characteristic interface velocities for each liquid slug
     V = [mean(elem) for elem in dXdt]
 
-    # get a characteristic Capilarry number based on the average velocities
+    # get a characteristic Capillary number based on the average velocities
     Vavg = mean(abs.(V))
     Ca = getCa.(μₗ,σ,Vavg)
 
@@ -31,7 +28,7 @@ function dynamicsmodel(u::Array{Float64,1},p::PHPSystem)
     Adeposit_left = [elem[1] for elem in Adeposit]
     Adeposit_right = [elem[2] for elem in Adeposit]
 
-    # get actrual liquid film area
+    # get actual liquid film area
     Astart = getδarea.(Ac,d,δstart)
     Aend = getδarea.(Ac,d,δend)
 

@@ -105,6 +105,33 @@ Open each notebook and run all cells (menu: **Run ▸ Run All Cells**).
 That's the whole workflow. Edit the parameters in `OHP simulation.ipynb`, re-run it, then re-run
 `PostProcessing-oneresult.ipynb` to see the effect.
 
+## Local Development
+1. Clone the repo:
+```
+   git clone https://github.com/liyuxuan48/OscillatingHeatPipe.jl
+```
+
+2. Enter the root directory of the project, then build your Julia environment:
+```
+   julia --project=. -e 'using Pkg; Pkg.instantiate()'
+```
+
+3. Run the Julia REPL:
+```
+   julia --project=.
+```
+
+### Run Tests
+1. Run the Julia REPL:
+```
+   julia --project=.
+```
+
+2. Press `]` to enter the package manager, then type:
+```
+   test
+```
+
 ## Citation
 
 If you use this package, please cite the associated paper:

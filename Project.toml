@@ -1,6 +1,6 @@
 name = "OscillatingHeatPipe"
 uuid = "d0e5c285-36a4-4c17-b2d2-a3652d369245"
-authors = ["yuxuanli <liyuxuan48@live.com>"]
+authors = ["yuxuanli <liyuxuan48@live.com>", "jrrm <jrrm@g.ucla.edu>"]
 version = "0.1.0"
 
 [deps]
