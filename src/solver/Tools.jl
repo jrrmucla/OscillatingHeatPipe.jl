@@ -1,9 +1,8 @@
 export getgvec,getgh,delta, # get actrual heightg of the tube
 XptoLvaporplug,XptoLliquidslug,getXpvapor, # transfer Xp to the length of vapors, length of liquids, and Xp for vapor.
 # ifamong,constructXarrays,
-duliquidθtovec,duwallθtovec,liquidθtovec,wallθtovec, # transfer temperature field to state vector for liquid and wall.
 Hfilm,getδarea,getδFromδarea,getMvapor,getMfilm,getMliquid,getMtotal,getchargeratio,getVolumevapor,
-getCa,getAdeposit,f_churchill,Catoδ,RntoΔT,systoM
+getCa,get_area_of_newly_deposited_films,f_churchill,Catoδ,RntoΔT,systoM
 
 function getgvec(g0::T,g_angle::T=3/2*π) where {T<:Real}
     g = g0*[cos(g_angle),sin(g_angle)]
@@ -15,96 +14,6 @@ function getgh(g::Vector{T},x::Vector{T},y::Vector{T}) where {T<:Real}
 end
 
 delta(n) = n != 0
-
-
-#=
-Some notes on structures of liquid and vapor positions:
-- The Xp is coupled by every liquid slug. For instance, if there is one liquid slug. Xp is a one-element tuple (Xp[1][1], Xp[1][2]).
-    But sometimes we need Xp to be coupled by every vapor plug. For one liquid slug, we have two vapor plugs.
-    So by adding 0 and L at the beginning and the end,
-    we construct a two-element tuple ((0.0,Xp[1][1]) and ((Xp[1][2],L). Generally, for every N-element Xp, we construct an N+1 element Xpvapor
-        Xp    ::   the locations of all interfaces, each element means a liquid slug.
-        L     ::   the length of the 1D tube
-- Xp contains the liquid slug begin/end positions (in arclength). It is arranged as a
-  vector of tuples, where the first tuple element is the beginning and second element is
-  the end
-- If the tube is periodic, then `tube.closedornot = true` and there are as many vapor plugs as liquid slugs.
-  Vapor plug i is bounded by liquid slugs i-1 and i. Plug 1 is bounded by N and 1.
-- If the tube is not periodic, then there is one less vapor plug than liquid slugs. Vapor plug i is bounded
-  by slugs i and i+1.
-=#
-
-"""
-    Xtovec(Xp,dXdt) -> Vector
-
-Transform vectors `Xp`, `dXdt` with the coordinates and velocities of the liquid slug interfaces into
-a single state vector 
-"""
-function Xtovec(Xp::Array{Tuple{Float64,Float64},1},dXdt::Array{Tuple{Float64,Float64},1})
-        
-    Np = length(Xp)
-    u = zeros(4*Np)
-    
-    for i = 1:Np
-        # input Xp
-        u[2*i-1] = Xp[i][1]
-        u[2*i] = Xp[i][end]
-        # input dXdt
-        u[2*Np + 2*i-1] = dXdt[i][1]
-        u[2*Np + 2*i] = dXdt[i][end]
-    end
-    
-    return u
-end
-
-
-"""
-    XMδLtovec(Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end) -> Vector
-
-Assemble vectors `Xp`, `dXdt` of the coordinates and velocities of the slug interfaces, and
-mass `M` of the vapor regions, `δstart` and `δend` of film thicknesses, and `Lfilm_start`
-and `Lfilm_end` of film lengths, to form state vector.
-"""
-function XMδLtovec(Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end)
-    return ([Xtovec(Xp,dXdt);M;δstart;δend;Lfilm_start;Lfilm_end])
-end
-
-"""
-    vectoXMδL(u) -> Vector{Tuple}, Vector{Tuple}, Vector, Vector, Vector, Vector, Vector, Vector, Vector
-
-Disassemble the state vector `u` into vectors `Xp`, `dXdt` of the coordinates and velocities of the slug interfaces, and
-mass `M` of the vapor regions, `δstart` and `δend` of film thicknesses, and `Lfilm_start`
-and `Lfilm_end` of film lengths.
-"""
-function vectoXMδL(u::Array{Float64,1})
-
-    maxindex = div(length(u),9)
-    maxliquidindex = 0
-    if mod(length(u),9) == 4
-        maxliquidindex = maxindex + 1
-    elseif mod(length(u),9) == 0
-        maxliquidindex = maxindex
-    else
-        println("new function error")
-        return error("new function error")
-    end
-
-    Xp =   map(tuple, zeros(maxliquidindex), zeros(maxliquidindex))
-    dXdt = map(tuple, zeros(maxliquidindex), zeros(maxliquidindex))
-    for i = 1:maxliquidindex
-        # input Xp
-        Xp[i] = (u[2*i-1],u[2*i])
-        # input dXdt
-        dXdt[i] = (u[2*maxliquidindex + 2*i-1],u[2*maxliquidindex + 2*i])
-    end
-
-    M =             u[4*maxliquidindex+1:           4*maxliquidindex+maxindex]
-    δstart =        u[4*maxliquidindex+maxindex+1:  4*maxliquidindex+2maxindex]
-    δend =          u[4*maxliquidindex+2maxindex+1: 4*maxliquidindex+3maxindex]
-    Lfilm_start =   u[4*maxliquidindex+3maxindex+1: 4*maxliquidindex+4maxindex]
-    Lfilm_end =     u[4*maxliquidindex+4maxindex+1: 4*maxliquidindex+5maxindex]
-    return Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end
-end
 
 """
     XptoLvaporplug(Xp,L,closedornot) -> Vector{Float64}
@@ -299,30 +208,6 @@ end
 
 
 """
-    A bunch of functions to transfer θ to state vector rate du
-"""
-
-function duliquidθtovec(duθarrays::Vector{Vector{Float64}})
-    return vcat(map(oneduliquidθtovec, duθarrays)...)
-end
-
-function oneduliquidθtovec(duθarray::Vector{Float64})
-    return [0.0; duθarray]
-end
-
-"""
-    A bunch of functions to transfer θ to state vector u
-"""
-
-function liquidθtovec(θarrays::Vector{Vector{Float64}})
-    return vcat(map(wallθtovec, θarrays)...)
-end
-
-function wallθtovec(θwall::Vector{Float64})
-    return [SEPERATION_VAR; θwall]
-end
-
-"""
     Hfilm(δfilm,sys::PHPSystem) -> Float64
 
 Return the heat transfer coefficient for the film with thickness `δfilm`
@@ -491,13 +376,17 @@ end
 
 
 """
-    getAdeposit(sys,δdeposit) -> Vector{Tuple}
+    get_area_of_newly_deposited_films(sys) -> Vector{Tuple}
 
 Return the cross-sectional areas of deposited films, associated with each liquid slug's
 interfaces. For an open tube, the first and last slugs are stuck at the ends of the tube,
 so the deposited film areas are set to zero and ignored.
+
+Implementation of (3) from Yuxuan 2024
 """
-function getAdeposit(sys,δdeposit)
+function get_area_of_newly_deposited_films(sys)
+    @unpack μₗ,σ = sys.liquid
+    @unpack ad_fac = sys.vapor
     dXdt= sys.liquid.dXdt
     Ac= sys.tube.Ac
     d = sys.tube.d
@@ -505,9 +394,17 @@ function getAdeposit(sys,δdeposit)
     δstart = sys.vapor.δstart
     δend = sys.vapor.δend
 
-    Nliquid = length(dXdt)
+    num_liquid_slugs = length(dXdt)
 
-    # numofliquidslug = length(dXdt)
+    # characteristic interface velocities for each liquid slug
+    V = [mean(elem) for elem in dXdt]
+
+    # get a characteristic Capillary number based on the average velocities
+    Vavg = mean(abs.(V))
+    Ca = getCa.(μₗ,σ,Vavg)
+
+    # get liquid film deposition area
+    δdeposit = Catoδ(d,Ca,adjust_factor=ad_fac)
 
     # Areas of deposited films
     δdepositArea = getδarea.(Ac,d,δdeposit)
@@ -517,7 +414,7 @@ function getAdeposit(sys,δdeposit)
     δarea_end = getδarea.(Ac,d,δend)
 
 # need to initialize it later on
-    loop_plus_index = circshift(1:Nliquid,-1)
+    loop_plus_index = circshift(1:num_liquid_slugs,-1)
     Adeposit = deepcopy(dXdt)
 
 # left and right are relative for liquid. Left = behind, right = ahead

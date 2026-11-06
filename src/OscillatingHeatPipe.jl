@@ -21,6 +21,7 @@ export expfileDict,INCHES, GRAVITY
 
 include("constants.jl")
 include("utils/Systems.jl")
+include("solver/StateVectors.jl")
 include("utils/CoolProp.jl")
 include("utils/Preprocessing.jl")
 include("utils/ResultsIO.jl")

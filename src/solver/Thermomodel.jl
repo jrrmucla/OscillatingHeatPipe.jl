@@ -1,12 +1,152 @@
 export dMdtdynamicsmodel,dynamicsmodel_steadyfilm,wallmodel,liquidmodel,dynamicsmodel,sys_to_heatflux,sys_to_Harray,integrator_to_heatflux,integrator_to_Harray
 
+function _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
+    Ac, Lliquidslug, Xpvapor, ρₗ, d, δstart, δend, Eratio_plus, Eratio_minus,
+    Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
+    Astart, Aend, rhs_dXdt, rhs_g, heightg, rhs_press, P)
+
+    #. initialize vapor velocities for left (smaller ξ) and right (larger ξ) side
+    numofvaporbubble = numofliquidslug - 1
+    v_vapor_left_normal=zeros(numofvaporbubble)
+    v_vapor_right_normal=zeros(numofvaporbubble)
+
+    # get average velocities of the liquid slugs
+    v_momentum = @view u[2*numofliquidslug+1:2:4*numofliquidslug]
+    v_momentum_vapor_end = v_momentum[2:end]
+    v_momentum_vapor_start = v_momentum[1:end-1]
+
+    # Continuity of Liquid Slugs to determine interface velocities
+    # Ref: Yuxuan 2024 (1)
+    v_liquid_left_normal  = v_momentum .+ v_momentum .* Adeposit_left ./ (Ac .- Adeposit_left)
+    v_liquid_right_normal = v_momentum .+ v_momentum .* Adeposit_right ./(Ac .- Adeposit_right)
+    
+    rhs_dLdt = -v_momentum .* (v_liquid_right_normal .- v_liquid_left_normal) ./ Lliquidslug
+
+    # vapor δ
+    v_vapor_left_normal = v_liquid_right_normal[1:end-1]
+    v_vapor_right_normal = v_liquid_left_normal[2:end]
+
+    A_dδdt_right_vapor = Adeposit_left[2:end]
+    A_dδdt_left_vapor = Adeposit_right[1:end-1]
+
+
+    dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive = dMdtdynamicsmodel(Xpvapor,sys)
+    dMdt_latent_start_negative = dMdt_latent_start .- dMdt_latent_start_positive
+    dMdt_latent_end_negative =   dMdt_latent_end   .- dMdt_latent_end_positive
+
+    dLdt_start,dLdt_end,dδdt_start,dδdt_end,v_vapor_start_final,v_vapor_end_final = film_dynamics(ρₗ, Ac,d,δstart,δend,dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_start_negative,Eratio_plus,Eratio_minus,
+    v_vapor_left_normal,dMdt_latent_end_positive,dMdt_latent_end_negative,v_vapor_right_normal,A_dδdt_left_vapor,A_dδdt_right_vapor,
+    Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Astart,Aend)
+
+    v_liquid_left_final = [0.0;vcat(v_vapor_end_final...)]
+    v_liquid_right_final = [vcat(v_vapor_start_final...);0.0]
+
+    # up tp here
+    for i = 1:numofliquidslug
+        du[2*i-1] = v_liquid_left_final[i]
+        du[2*i] = v_liquid_right_final[i]
+
+        if (i != 1) && (i != numofliquidslug)
+            du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i-1]-P[i]) + rhs_dLdt[i]
+        else
+            du[2*numofliquidslug + 2*i-1] = 0.0
+        end                
+
+        du[2*numofliquidslug + 2*i] = du[2*numofliquidslug + 2*i-1]
+    end
+
+
+    du[4*numofliquidslug+1:4*numofliquidslug+numofvaporbubble] = dMdt_latent_start+dMdt_latent_end
+    du[4*numofliquidslug+numofvaporbubble+1:4*numofliquidslug+2*numofvaporbubble] .= 0.0 # equals to 0 for now
+    du[4*numofliquidslug+2*numofvaporbubble+1:4*numofliquidslug+3*numofvaporbubble] .= 0.0 # equals to 0 for now
+    # du[4*numofliquidslug+numofvaporbubble+1:4*numofliquidslug+2*numofvaporbubble] = dδdt_start # equals to 0 for now
+    # du[4*numofliquidslug+2*numofvaporbubble+1:4*numofliquidslug+3*numofvaporbubble] = dδdt_end # equals to 0 for now
+    du[4*numofliquidslug+3*numofvaporbubble+1:4*numofliquidslug+4*numofvaporbubble] = dLdt_start # equals to 0 for now
+    du[4*numofliquidslug+4*numofvaporbubble+1:4*numofliquidslug+5*numofvaporbubble] = dLdt_end # equals to 0 for now
+
+    return du
+end
+
+function _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
+    Ac, Lliquidslug, Xpvapor, ρₗ, d, δstart, δend, Eratio_plus, Eratio_minus,
+    Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
+    Astart, Aend, rhs_dXdt, rhs_g, heightg, rhs_press, P)
+
+    #. initialize vapor velocities for left (smaller ξ) and right (larger ξ) side
+    numofvaporbubble = numofliquidslug
+    v_vapor_left_normal=zeros(numofvaporbubble)
+    v_vapor_right_normal=zeros(numofvaporbubble)
+
+    # get average velocities of the liquid slugs
+    v_momentum = @view u[2*numofliquidslug+1:2:4*numofliquidslug]
+    v_momentum_vapor_end = v_momentum
+    v_momentum_vapor_start = [v_momentum[end];v_momentum[1:end-1]]
+
+    # Continuity of Liquid Slugs to determine interface velocities
+    # Ref: Yuxuan 2024 (1)
+    v_liquid_left_normal  = v_momentum .+ v_momentum .* Adeposit_left ./ (Ac .- Adeposit_left)
+    v_liquid_right_normal = v_momentum .+ v_momentum .* Adeposit_right ./(Ac .- Adeposit_right)
+
+    rhs_dLdt = -v_momentum .* (v_liquid_right_normal .- v_liquid_left_normal) ./ Lliquidslug
+
+    # vapor δ
+    v_vapor_left_normal[2:end] = @view v_liquid_right_normal[1:end-1]
+    v_vapor_left_normal[1] = v_liquid_right_normal[end]
+    v_vapor_right_normal = v_liquid_left_normal
+
+    A_dδdt_right_vapor = Adeposit_left
+    A_dδdt_right_liquid = Adeposit_right
+    A_dδdt_left_vapor = zeros(size(A_dδdt_right_vapor))
+    A_dδdt_left_vapor[2:end] = @view A_dδdt_right_liquid[1:end-1]
+    A_dδdt_left_vapor[1] = A_dδdt_right_liquid[end]
+
+    dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive = dMdtdynamicsmodel(Xpvapor,sys)
+    dMdt_latent_start_negative = dMdt_latent_start .- dMdt_latent_start_positive
+    dMdt_latent_end_negative =   dMdt_latent_end   .- dMdt_latent_end_positive
+
+    dLdt_start,dLdt_end,dδdt_start,dδdt_end,v_vapor_start_final,v_vapor_end_final = film_dynamics(ρₗ, Ac,d,δstart,δend,dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_start_negative,Eratio_plus,Eratio_minus,
+    v_vapor_left_normal,dMdt_latent_end_positive,dMdt_latent_end_negative,v_vapor_right_normal,A_dδdt_left_vapor,A_dδdt_right_vapor,
+    Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Astart,Aend)
+
+    v_liquid_left_final = v_vapor_end_final
+    v_liquid_right_final = [@view v_vapor_start_final[2:end];v_vapor_start_final[1]]
+
+    # this looks like an implementation of the liquid momentum equation (6)
+    for i = 1:numofliquidslug
+        du[2*i-1] = v_liquid_left_final[i]
+        du[2*i] = v_liquid_right_final[i]
+
+        if i != numofliquidslug
+            du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[i+1]) + rhs_dLdt[i]
+        else
+            du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[1]) + rhs_dLdt[i]
+        end                
+
+        du[2*numofliquidslug + 2*i] = du[2*numofliquidslug + 2*i-1]
+
+    end
+
+    du[4*numofliquidslug+1:5*numofliquidslug] = dMdt_latent_start+dMdt_latent_end
+    du[5*numofliquidslug+1:6*numofliquidslug] = dδdt_start # equals to 0 for now
+    du[6*numofliquidslug+1:7*numofliquidslug] = dδdt_end # equals to 0 for now
+    du[7*numofliquidslug+1:8*numofliquidslug] = dLdt_start # equals to 0 for now
+    du[8*numofliquidslug+1:9*numofliquidslug] = dLdt_end # equals to 0 for now
+
+    return du
+end
+
+
+
 # this is a equation takes the current u and returns du/dt, p was already updated from the current u.
-function dynamicsmodel(u::Array{Float64,1},p::PHPSystem)
+"""
+    This equation takes the current state vector (u) and returns du/dt
+"""
+function dynamicsmodel(u::Array{Float64,1}, php_sys::PHPSystem)
     
     du = zeros(size(u))
 
     # extracts essential information stored at sys::PHPSystem
-    sys = p
+    sys :: PHPSystem = php_sys
     @unpack d,peri,Ac,g,L,closedornot = sys.tube
     @unpack σ,μₗ,ρₗ,Xp,dXdt = sys.liquid
     @unpack P,Eratio_plus,Eratio_minus,δstart,δend,Lfilm_start,Lfilm_end,ad_fac = sys.vapor
@@ -15,16 +155,9 @@ function dynamicsmodel(u::Array{Float64,1},p::PHPSystem)
     # number of liquid slugs
     numofliquidslug = length(Xp)
 
-    # characteristic interface velocities for each liquid slug
-    V = [mean(elem) for elem in dXdt]
-
-    # get a characteristic Capillary number based on the average velocities
-    Vavg = mean(abs.(V))
-    Ca = getCa.(μₗ,σ,Vavg)
-
-    # get liquid film deposition area
-    δdeposit = Catoδ(d,Ca,adjust_factor=ad_fac)
-    Adeposit = getAdeposit(sys,δdeposit)
+    # Yuxuan 2024, equation (3)
+    
+    Adeposit = get_area_of_newly_deposited_films(sys)
     Adeposit_left = [elem[1] for elem in Adeposit]
     Adeposit_right = [elem[2] for elem in Adeposit]
 
@@ -47,9 +180,10 @@ function dynamicsmodel(u::Array{Float64,1},p::PHPSystem)
     curv_interp = sys.mapping.curv_interp_walltoliquid
     lhs = ρₗ*Ac .* Lliquidslug
     rhs_press = Ac ./ lhs
+    V = [mean(elem) for elem in dXdt]
     Re_list = ρₗ .* abs.(V) .* d ./ μₗ
-    f_coefficient = f_churchill.(Re_list .+ 1e-4)
-    dXdt_to_stress = -0.125 .* f_coefficient .* ρₗ .* V .* abs.(V)
+    friction_coefficient = f_churchill.(Re_list .+ 1e-4)
+    dXdt_to_stress = -0.125 .* friction_coefficient .* ρₗ .* V .* abs.(V)
     rhs_dXdt = peri .* Lliquidslug .* dXdt_to_stress ./ lhs
     rhs_g = Ac*ρₗ ./ lhs
 
@@ -58,160 +192,18 @@ function dynamicsmodel(u::Array{Float64,1},p::PHPSystem)
     L0threshold_pure_vapor = DEFAULT_L0_PURE_VAPOR_FRAC*L_newbubble
 
     if closedornot == false
-        numofvaporbubble = numofliquidslug - 1
-
-        # initialize liquid and vapor velocities for left(smaller ξ) and right(larger ξ) side
-        # v_liquid_left_normal=zeros(numofliquidslug)
-        # v_liquid_right_normal=zeros(numofliquidslug)
-        v_vapor_left_normal=zeros(numofvaporbubble)
-        v_vapor_right_normal=zeros(numofvaporbubble)
-
-        # get average velocities of the liquid slugs
-        v_momentum = @view u[2*numofliquidslug+1:2:4*numofliquidslug]
-        v_momentum_vapor_end = v_momentum[2:end]
-        v_momentum_vapor_start = v_momentum[1:end-1]
-        v_liquid_left_normal  = v_momentum .+ v_momentum .* Adeposit_left ./ (Ac .- Adeposit_left)
-        v_liquid_right_normal = v_momentum .+ v_momentum .* Adeposit_right ./(Ac .- Adeposit_right)
-        
-        rhs_dLdt = -v_momentum .* (v_liquid_right_normal .- v_liquid_left_normal) ./ Lliquidslug
-
-        # vapor δ
-        v_vapor_left_normal = v_liquid_right_normal[1:end-1]
-        v_vapor_right_normal = v_liquid_left_normal[2:end]
-
-        A_dδdt_right_vapor = Adeposit_left[2:end]
-        A_dδdt_left_vapor = Adeposit_right[1:end-1]
-  
-
-        dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive = dMdtdynamicsmodel(Xpvapor,sys)
-        dMdt_latent_start_negative = dMdt_latent_start .- dMdt_latent_start_positive
-        dMdt_latent_end_negative =   dMdt_latent_end   .- dMdt_latent_end_positive
-
-        # println(dMdt_latent_end)
-        # println(dMdt_latent_end_positive)
-        # println(dMdt_latent_end_negative)
-
-        # println(dMdt_latent_start)
-        # println(dMdt_latent_start_positive)
-        # println(dMdt_latent_start_negative)
-
-
-        dLdt_start,dLdt_end,dδdt_start,dδdt_end,v_vapor_start_final,v_vapor_end_final = film_dynamics(ρₗ, Ac,d,δstart,δend,dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_start_negative,Eratio_plus,Eratio_minus,
-        v_vapor_left_normal,dMdt_latent_end_positive,dMdt_latent_end_negative,v_vapor_right_normal,A_dδdt_left_vapor,A_dδdt_right_vapor,
-        Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Astart,Aend)
-
-        v_liquid_left_final = [0.0;vcat(v_vapor_end_final...)]
-        v_liquid_right_final = [vcat(v_vapor_start_final...);0.0]
-
-        # up tp here
-        for i = 1:numofliquidslug
-                du[2*i-1] = v_liquid_left_final[i]
-                du[2*i] = v_liquid_right_final[i]
-
-                if (i != 1) && (i != numofliquidslug)
-                    du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i-1]-P[i]) + rhs_dLdt[i]
-                else
-                    du[2*numofliquidslug + 2*i-1] = 0.0
-                end                
-
-                du[2*numofliquidslug + 2*i] = du[2*numofliquidslug + 2*i-1]
-
-            end
-
-
-            du[4*numofliquidslug+1:4*numofliquidslug+numofvaporbubble] = dMdt_latent_start+dMdt_latent_end
-            du[4*numofliquidslug+numofvaporbubble+1:4*numofliquidslug+2*numofvaporbubble] .= 0.0 # equals to 0 for now
-            du[4*numofliquidslug+2*numofvaporbubble+1:4*numofliquidslug+3*numofvaporbubble] .= 0.0 # equals to 0 for now
-            # du[4*numofliquidslug+numofvaporbubble+1:4*numofliquidslug+2*numofvaporbubble] = dδdt_start # equals to 0 for now
-            # du[4*numofliquidslug+2*numofvaporbubble+1:4*numofliquidslug+3*numofvaporbubble] = dδdt_end # equals to 0 for now
-            du[4*numofliquidslug+3*numofvaporbubble+1:4*numofliquidslug+4*numofvaporbubble] = dLdt_start # equals to 0 for now
-            du[4*numofliquidslug+4*numofvaporbubble+1:4*numofliquidslug+5*numofvaporbubble] = dLdt_end # equals to 0 for now
-
-
-            # println(dδdt_end)
-            # println(δdeposit)
-            # println(Vavg)
-            # println(v_momentum)
-            # println(Adeposit)
-            # println(Adeposit_left)
-            # println(v_liquid_left_normal)
-            # println(δstart)
-            # println(δend)
-            # println(Lfilm_end)
-            # println(dLdt_start)
-            # println(dLdt_end)
-            # println(v_liquid_left_final)
-            # println(v_liquid_right_final)
-
-            return du
-
+        return _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
+            Ac, Lliquidslug, Xpvapor, ρₗ, d, δstart, δend, Eratio_plus, Eratio_minus,
+            Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
+            Astart, Aend, rhs_dXdt, rhs_g, heightg, rhs_press, P)
     end
 
     if closedornot == true
-
-        numofvaporbubble = numofliquidslug
-
-        # initialize liquid and vapor velocities for left(smaller ξ) and right(larger ξ) side
-        # v_liquid_left_normal=zeros(numofliquidslug)
-        # v_liquid_right_normal=zeros(numofliquidslug)
-        v_vapor_left_normal=zeros(numofvaporbubble)
-        v_vapor_right_normal=zeros(numofvaporbubble)
-
-        # get average velocities of the liquid slugs
-        v_momentum = @view u[2*numofliquidslug+1:2:4*numofliquidslug]
-        v_momentum_vapor_end = v_momentum
-        v_momentum_vapor_start = [v_momentum[end];v_momentum[1:end-1]]
-        v_liquid_left_normal  = v_momentum .+ v_momentum .* Adeposit_left ./ (Ac .- Adeposit_left)
-        v_liquid_right_normal = v_momentum .+ v_momentum .* Adeposit_right ./(Ac .- Adeposit_right)
-        
-        rhs_dLdt = -v_momentum .* (v_liquid_right_normal .- v_liquid_left_normal) ./ Lliquidslug
-
-        # vapor δ
-        v_vapor_left_normal[2:end] = @view v_liquid_right_normal[1:end-1]
-        v_vapor_left_normal[1] = v_liquid_right_normal[end]
-        v_vapor_right_normal = v_liquid_left_normal
-
-        A_dδdt_right_vapor = Adeposit_left
-        A_dδdt_right_liquid = Adeposit_right
-        A_dδdt_left_vapor = zeros(size(A_dδdt_right_vapor))
-        A_dδdt_left_vapor[2:end] = @view A_dδdt_right_liquid[1:end-1]
-        A_dδdt_left_vapor[1] = A_dδdt_right_liquid[end]
-
-        dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive = dMdtdynamicsmodel(Xpvapor,sys)
-        dMdt_latent_start_negative = dMdt_latent_start .- dMdt_latent_start_positive
-        dMdt_latent_end_negative =   dMdt_latent_end   .- dMdt_latent_end_positive
-
-        dLdt_start,dLdt_end,dδdt_start,dδdt_end,v_vapor_start_final,v_vapor_end_final = film_dynamics(ρₗ, Ac,d,δstart,δend,dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_start_negative,Eratio_plus,Eratio_minus,
-        v_vapor_left_normal,dMdt_latent_end_positive,dMdt_latent_end_negative,v_vapor_right_normal,A_dδdt_left_vapor,A_dδdt_right_vapor,
-        Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Astart,Aend)
-
-        v_liquid_left_final = v_vapor_end_final
-        v_liquid_right_final = [@view v_vapor_start_final[2:end];v_vapor_start_final[1]]
-
-        for i = 1:numofliquidslug
-                du[2*i-1] = v_liquid_left_final[i]
-                du[2*i] = v_liquid_right_final[i]
-
-                if i != numofliquidslug
-                    du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[i+1]) + rhs_dLdt[i]
-                else
-                    du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[1]) + rhs_dLdt[i]
-                end                
-
-                du[2*numofliquidslug + 2*i] = du[2*numofliquidslug + 2*i-1]
-
-            end
-
-            du[4*numofliquidslug+1:5*numofliquidslug] = dMdt_latent_start+dMdt_latent_end
-            du[5*numofliquidslug+1:6*numofliquidslug] = dδdt_start # equals to 0 for now
-            du[6*numofliquidslug+1:7*numofliquidslug] = dδdt_end # equals to 0 for now
-            du[7*numofliquidslug+1:8*numofliquidslug] = dLdt_start # equals to 0 for now
-            du[8*numofliquidslug+1:9*numofliquidslug] = dLdt_end # equals to 0 for now
-
-            return du
+        return _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
+            Ac, Lliquidslug, Xpvapor, ρₗ, d, δstart, δend, Eratio_plus, Eratio_minus,
+            Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
+            Astart, Aend, rhs_dXdt, rhs_g, heightg, rhs_press, P)
     end
-
-
 end
 
 function film_dynamics(ρₗ, Ac,d,δstart,δend,dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_start_negative,Eratio_plus,Eratio_minus,
@@ -270,13 +262,6 @@ function film_dynamics(ρₗ, Ac,d,δstart,δend,dMdt_latent_start,dMdt_latent_e
 
     dδdt_start = sum(he_matrix_start .* dδdt_matrix_start,dims=1)
     dδdt_end = sum(he_matrix_end .* dδdt_matrix_end,dims=1)
-
-    # println((-dMdt_latent_end     .- F_end   .* dLdt_end'   .+ ρₗ .* A_dδdt_right_vapor .* v_vapor_right_normal))
-    # println(-dMdt_latent_end)
-    # println( F_end   .* dLdt_end')
-    # println(C_end .* Lfilm_end)
-    # println(dδdt_end_normal)
-
 
     return dLdt_start,dLdt_end,dδdt_start,dδdt_end,v_vapor_start_final,v_vapor_end_final
 end
@@ -397,6 +382,10 @@ function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::PHPSyst
             return dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive
 end
 
+"""
+    Models thermal energy within liquid slugs.
+    Reference: (9) Yuxuan 2024
+"""
 function liquidmodel(p::PHPSystem)
     @unpack θarrays,Xarrays,Hₗ,αₗ,Cpₗ,ρₗ = p.liquid
     @unpack Ac,L,peri = p.tube
@@ -426,8 +415,6 @@ end
 
     u    ::  an array
 """
-
-
 function laplacian(u::Vector{Float64})
     unew = zeros(size(u))
 

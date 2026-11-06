@@ -55,7 +55,7 @@ function boiling_affect!(integrator)
     
     M = getMvapor(p)
 
-    unew=[XMδLtovec(p.liquid.Xp,p.liquid.dXdt,M,p.vapor.δstart,p.vapor.δend,p.vapor.Lfilm_start,p.vapor.Lfilm_end);liquidθtovec(p.liquid.θarrays)];
+    unew=[XMδL_to_u(p.liquid.Xp,p.liquid.dXdt,M,p.vapor.δstart,p.vapor.δend,p.vapor.Lfilm_start,p.vapor.Lfilm_end);liquidθtovec(p.liquid.θarrays)];
 
     resize!(integrator.u,length(unew))
     integrator.u = deepcopy(unew)

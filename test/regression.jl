@@ -258,8 +258,8 @@ function compare_regression_state(actual, expected)
     last_mechanical = first(actual_separators) - 1
     @test rem(last_mechanical, 9) in (0, 4)
     rem(last_mechanical, 9) in (0, 4) || return
-    a = OscillatingHeatPipe.vectoXMδL(actual[1:last_mechanical])
-    b = OscillatingHeatPipe.vectoXMδL(expected[1:last_mechanical])
+    a = OscillatingHeatPipe.u_to_XMδL(actual[1:last_mechanical])
+    b = OscillatingHeatPipe.u_to_XMδL(expected[1:last_mechanical])
 
     # because our values span so many orders of magnitude, 
     # we use different tolerances for each

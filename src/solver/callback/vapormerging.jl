@@ -31,7 +31,7 @@ function vaporMergingAffect!(integrator)
     @unpack PtoD = p.propconvert
     M = PtoD.(p.vapor.P) .* volume_vapor
 
-    unew=[XMδLtovec(p.liquid.Xp,p.liquid.dXdt,M,δstart,δend,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
+    unew=[XMδL_to_u(p.liquid.Xp,p.liquid.dXdt,M,δstart,δend,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
 
     resize!(integrator.u,size(unew,1)::Int)
     integrator.u = deepcopy(unew)

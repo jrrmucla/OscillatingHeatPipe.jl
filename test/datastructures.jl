@@ -57,7 +57,7 @@ using Statistics
         ## test assembly and disassembly 
         
         dXdt .= [(rand(),rand()) for j in 1:np]
-        u = OscillatingHeatPipe.Xtovec(X,dXdt)
+        u = OscillatingHeatPipe.X_to_u(X,dXdt)
 
         ir = rand(1:np)
         Xi, Xf = X[ir]
@@ -72,9 +72,9 @@ using Statistics
         Lfilm_end = rand(np)
         
         # Test that assembly and disassembly are inverses of each other
-        u = OscillatingHeatPipe.XMδLtovec(X,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end)
+        u = OscillatingHeatPipe.XMδL_to_u(X,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end)
 
-        X2,dXdt2,M2,δstart2,δend2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.vectoXMδL(u)
+        X2,dXdt2,M2,δstart2,δend2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.u_to_XMδL(u)
 
         @test X2 == X
         @test dXdt2 == dXdt
@@ -89,8 +89,8 @@ using Statistics
         # so that Xp contains (0,Xp1) and (Xpn,L) to describe the end vapor plugs.
         X = [(rand(),rand()) for j in 1:np+1]
         dXdt = [(rand(),rand()) for j in 1:np+1]
-        u = OscillatingHeatPipe.XMδLtovec(X,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end)
-        X2,dXdt2,M2,δstart2,δend2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.vectoXMδL(u)
+        u = OscillatingHeatPipe.XMδL_to_u(X,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end)
+        X2,dXdt2,M2,δstart2,δend2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.u_to_XMδL(u)
 
         @test X2 == X
         @test dXdt2 == dXdt
@@ -116,7 +116,9 @@ sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
     dXdt = sys_tube.liquid.dXdt
     Ac = sys_tube.tube.Ac
 
-    δdep = 0.05*rand()*d
+    # Each moving interface below gives a mean slug speed of 0.05.
+    Ca = getCa(sys_tube.liquid.μₗ,sys_tube.liquid.σ,0.05)
+    δdep = Catoδ(d,Ca,adjust_factor=sys_tube.vapor.ad_fac)
 
     δarea_start = Ac .* (1 .- ((d .- 2*δstart) ./ d) .^ 2)
     δarea_end = Ac .* (1 .- ((d .- 2*δend) ./ d) .^ 2)
@@ -125,19 +127,19 @@ sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
     @test all(δarea_end .== getδarea.(Ac,d,δend))
 
     # No slugs are moving. Should only be equal to existing films
-    Adep = getAdeposit(sys_tube,δdep)
+    Adep = get_area_of_newly_deposited_films(sys_tube)
     @test all(map((u,v) -> u[1]==v,Adep,δarea_end))
     @test all(map((u,v) -> u[2]==v,Adep,circshift(δarea_start,-1)))
 
     # Left slug interfaces are advancing. Should be equal to deposited film
     dXdt .= [(0.1,0.0) for i in eachindex(dXdt)]
-    Adep = getAdeposit(sys_tube,δdep)
+    Adep = get_area_of_newly_deposited_films(sys_tube)
     @test all(map(u -> u[1]==δarea_dep,Adep))
     @test all(map((u,v) -> u[2]==v,Adep,circshift(δarea_start,-1)))
 
     # Right slug interfaces are advancing. Should be equal to deposited film
     dXdt .= [(0.0,-0.1) for i in eachindex(dXdt)]
-    Adep = getAdeposit(sys_tube,δdep)
+    Adep = get_area_of_newly_deposited_films(sys_tube)
     @test all(map((u,v) -> u[1]==v,Adep,δarea_end))
     @test all(map(u -> u[2]==δarea_dep,Adep))
 

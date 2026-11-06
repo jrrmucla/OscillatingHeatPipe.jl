@@ -204,7 +204,7 @@ sys_plate = construct_system(prob);
 
         Lliquidslug = XptoLliquidslug(Xp,L)
 
-        Adeposit = getAdeposit(sys_tube,δdep)
+        Adeposit = get_area_of_newly_deposited_films(sys_tube)
         Adeposit_left = [elem[1] for elem in Adeposit]
         Adeposit_right = [elem[2] for elem in Adeposit]
         
@@ -406,7 +406,7 @@ end
         Ca = getCa.(μₗ,σ,Vavg)
 
         δdep = Catoδ(d,Ca,adjust_factor=ad_fac)
-        Adeposit = getAdeposit(sys_tube,δdep)
+        Adeposit = get_area_of_newly_deposited_films(sys_tube)
         Adeposit_left = [elem[1] for elem in Adeposit]
         Adeposit_right = [elem[2] for elem in Adeposit]
         V_normal_start = circshift(Ac ./ (Ac .- Adeposit_right) .*  V,1)
@@ -432,7 +432,7 @@ end
         u_tube = newstate(sys_tube) # initialize OHP tube
 
         uu_test3 = dynamicsmodel(u_tube[1:9*numofslugs],sys_tube)
-        # dX2,ddXdt2,dM2,dδstart2,dδend2,dLfilm_start2,dLfilm_end2 = ComputationalHeatTransfer.vectoXMδL(uu_test2)
+        # dX2,ddXdt2,dM2,dδstart2,dδend2,dLfilm_start2,dLfilm_end2 = ComputationalHeatTransfer.u_to_XMδL(uu_test2)
 
         V_start_analytical = zeros(numofslugs)
         V_end_analytical = zeros(numofslugs)
@@ -514,7 +514,7 @@ end
     Ca = getCa.(μₗ,σ,Vavg)
 
     δdep = Catoδ(d,Ca,adjust_factor=ad_fac)
-    Adeposit = getAdeposit(sys_tube,δdep)
+    Adeposit = get_area_of_newly_deposited_films(sys_tube)
     Adeposit_left = [elem[1] for elem in Adeposit]
     Adeposit_right = [elem[2] for elem in Adeposit]
     Adeposit_start = circshift(Adeposit_right,1)

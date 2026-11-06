@@ -1,4 +1,4 @@
-export SimulationResult,onesideXp,randomXp,initialize_ohpsys,store!,newstate
+export SimulationResult,onesideXp,randomXp,initialize_ohpsys,store!
 
 """
 (WIP)
@@ -232,17 +232,6 @@ function _get_ohp_from_forcing_list(sys::ILMSystem)
     return ohp
 end
 
-
-function newstate(sys0::PHPSystem)
-    @unpack Ac,d,L,closedornot = sys0.tube
-    @unpack Xp,dXdt = sys0.liquid
-    @unpack δstart,δend,Lfilm_start,Lfilm_end,P = sys0.vapor
-    @unpack PtoD = sys0.propconvert
-
-    M = systoM(sys0::PHPSystem)
-
-    u=[XMδLtovec(Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
-end
 
 mutable struct SimulationResult
     tube_hist_t      ::Vector{Any}
