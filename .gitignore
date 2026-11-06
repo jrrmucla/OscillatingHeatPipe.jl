@@ -28,6 +28,7 @@ docs/src/manual/*.md
 *.swp
 # stored data
 *.jld2
+!test/gold/*.jld2
 *.jld
 OHP_blue_gold.gif
 src/tmp.gif
