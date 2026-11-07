@@ -67,7 +67,7 @@ Vapor is a struct containing vapor properties at a ref temperature
     k::Float64              heat conductivity of liquid in the film
     δmin::Float64           the delta with maximum heat transfer coefficient in the H interpolation
     P::Array{Float64,1}     pressure in each vapor
-    δ::Array{Float64,1}     film thickness in each vapor
+    Afilm_start, Afilm_end::Vector{Float64}  cross-sectional film areas (m²); thickness = area / tube.peri
 end
 """
 @with_kw mutable struct Vapor
@@ -78,8 +78,8 @@ end
     Eratio_plus::Float64            = 0.15
     Eratio_minus::Float64           = 0.0
     P::Array{Float64,1}
-    δstart::Array{Float64,1}
-    δend::Array{Float64,1}
+    Afilm_start::Array{Float64,1}
+    Afilm_end::Array{Float64,1}
     Lfilm_start::Array{Float64,1}
     Lfilm_end::Array{Float64,1}
 end

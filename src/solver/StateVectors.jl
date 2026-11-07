@@ -41,24 +41,27 @@ end
 
 
 """
-    XMδL_to_u(Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end) -> Vector
+    XMAL_to_u(Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end) -> Vector
 
 Assemble vectors `Xp`, `dXdt` of the coordinates and velocities of the slug interfaces, and
-mass `M` of the vapor regions, `δstart` and `δend` of film thicknesses, and `Lfilm_start`
+mass `M` of the vapor regions, `Afilm_start` and `Afilm_end` of cross-sectional film areas (m²), and `Lfilm_start`
 and `Lfilm_end` of film lengths, to form state vector.
+
+The blocks are `[positions; velocities; masses; Afilm_start; Afilm_end; Lfilm_start; Lfilm_end]`.
+Film areas are in m²; derive thickness as `A / sys.tube.peri`.
 """
-function XMδL_to_u(Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end)
-    return ([X_to_u(Xp,dXdt);M;δstart;δend;Lfilm_start;Lfilm_end])
+function XMAL_to_u(Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end)
+    return ([X_to_u(Xp,dXdt);M;Afilm_start;Afilm_end;Lfilm_start;Lfilm_end])
 end
 
 """
-    u_to_XMδL(u) -> Vector{Tuple}, Vector{Tuple}, Vector, Vector, Vector, Vector, Vector, Vector, Vector
+    u_to_XMAL(u) -> Vector{Tuple}, Vector{Tuple}, Vector, Vector, Vector, Vector, Vector
 
 Disassemble the state vector `u` into vectors `Xp`, `dXdt` of the coordinates and velocities of the slug interfaces, and
-mass `M` of the vapor regions, `δstart` and `δend` of film thicknesses, and `Lfilm_start`
+mass `M` of the vapor regions, `Afilm_start` and `Afilm_end` of cross-sectional film areas (m²), and `Lfilm_start`
 and `Lfilm_end` of film lengths.
 """
-function u_to_XMδL(u::Array{Float64,1})
+function u_to_XMAL(u::Array{Float64,1})
 
     maxindex = div(length(u),9)
     maxliquidindex = 0
@@ -81,11 +84,11 @@ function u_to_XMδL(u::Array{Float64,1})
     end
 
     M =             u[4*maxliquidindex+1:           4*maxliquidindex+maxindex]
-    δstart =        u[4*maxliquidindex+maxindex+1:  4*maxliquidindex+2maxindex]
-    δend =          u[4*maxliquidindex+2maxindex+1: 4*maxliquidindex+3maxindex]
+    Afilm_start =        u[4*maxliquidindex+maxindex+1:  4*maxliquidindex+2maxindex]
+    Afilm_end =          u[4*maxliquidindex+2maxindex+1: 4*maxliquidindex+3maxindex]
     Lfilm_start =   u[4*maxliquidindex+3maxindex+1: 4*maxliquidindex+4maxindex]
     Lfilm_end =     u[4*maxliquidindex+4maxindex+1: 4*maxliquidindex+5maxindex]
-    return Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end
+    return Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end
 end
 
 """
@@ -115,12 +118,12 @@ end
 function newstate(sys0::PHPSystem)
     @unpack Ac,d,L,closedornot = sys0.tube
     @unpack Xp,dXdt = sys0.liquid
-    @unpack δstart,δend,Lfilm_start,Lfilm_end,P = sys0.vapor
+    @unpack Afilm_start,Afilm_end,Lfilm_start,Lfilm_end,P = sys0.vapor
     @unpack PtoD = sys0.propconvert
 
     M = systoM(sys0::PHPSystem)
 
-    u=[XMδL_to_u(Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
+    u=[XMAL_to_u(Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
 end
 
 """
@@ -141,7 +144,7 @@ function getcurrentsys_nowall!(u,sys0)
         end
     end
 
-    Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end = u_to_XMδL(u[1:indexes[1]-1])
+    Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end = u_to_XMAL(u[1:indexes[1]-1])
 
     if sys0.tube.closedornot == true 
         modX!(Xp,sys0.tube.L)
@@ -156,10 +159,8 @@ function getcurrentsys_nowall!(u,sys0)
     Ac = sys0.tube.Ac
 
     d = sys0.tube.d
-    δarea_start = Ac .* (1 .- ((d .- 2*δstart) ./ d) .^ 2);
-    δarea_end = Ac .* (1 .- ((d .- 2*δend) ./ d) .^ 2);
 
-    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* δarea_start - Lfilm_end .* δarea_end
+    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Afilm_start - Lfilm_end .* Afilm_end
     ρ = M ./ volume_vapor
 
     # println(Lvaporplug)
@@ -177,8 +178,8 @@ function getcurrentsys_nowall!(u,sys0)
     sysnew.liquid.Xarrays = updateXarrays(Xp,sysnew.liquid.θarrays,sysnew.tube.L)
 
     sysnew.vapor.P = P
-    sysnew.vapor.δstart = δstart
-    sysnew.vapor.δend = δend
+    sysnew.vapor.Afilm_start = Afilm_start
+    sysnew.vapor.Afilm_end = Afilm_end
     sysnew.vapor.Lfilm_start = Lfilm_start
     sysnew.vapor.Lfilm_end = Lfilm_end
 

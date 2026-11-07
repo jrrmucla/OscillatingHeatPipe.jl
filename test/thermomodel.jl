@@ -178,7 +178,7 @@ sys_plate = construct_system(prob);
         sys_tube = initialize_ohpsys(sys_plate,p_fluid,power,g=gi,slugnum=numofslugs,ηplus=rand())
         Vint = 1.0 + rand()
         sys_tube.liquid.dXdt = [zero.(X) .+ Vint for X in sys_tube.liquid.dXdt]# initial velocity of the slugs
-        sys_tube.vapor.δstart .= zeros(numofslugs) .+ 1e-5 # initial velocity of the slugs
+        sys_tube.vapor.Afilm_start .= sys_tube.tube.peri .* (zeros(numofslugs) .+ 1e-5 ) # initial film area
 
         u_tube = newstate(sys_tube) # initialize OHP tube
         # integrator_tube = init(u_tube,tspan,sys_tube); # construct integrator_tube
@@ -193,7 +193,7 @@ sys_plate = construct_system(prob);
         peri = sys_tube.tube.peri
         Xp = sys_tube.liquid.Xp
         dXdt = sys_tube.liquid.dXdt
-        δend = sys_tube.vapor.δend
+        Afilm_end = sys_tube.vapor.Afilm_end
         # characteristic bulk velocities for each liquid slug
         V = [mean(elem) for elem in sys_tube.liquid.dXdt]
         # get a characteristic Capilarry number based on the average velocities
@@ -249,13 +249,11 @@ sys_plate = construct_system(prob);
 
         @test all(isapprox.(uu_test1[4*numofslugs+1:5*numofslugs],0.0,atol=1e-12)) #dMdt = 0
 
-        @test all(isapprox.(uu_test1[5*numofslugs+1:6*numofslugs],0.0,atol=1e-12)) #dδstart/dt = 0
+        @test all(isapprox.(uu_test1[5*numofslugs+1:6*numofslugs],0.0,atol=1e-12)) #dAfilm_start/dt = 0
 
-        F_end = ρₗ .* getδarea.(Ac,d,δend)
-        F2_end = ρₗ .* getδarea.(Ac,d,δdep)
-
-        peri_end = peri .* (d .- 2δend)/d
-        C_end = ρₗ .* peri_end
+        F_end = ρₗ .* Afilm_end
+        F2_end = ρₗ .* (peri .* δdep)
+        C_end = ρₗ
         Lfilm_end = sys_tube.vapor.Lfilm_end
 
         @test all(uu_test1[6*numofslugs+1:7*numofslugs] .≈ (F2_end .- F_end) .* Ac ./ (Ac .- Adeposit_left) .*  V ./ C_end ./ Lfilm_end)
@@ -300,8 +298,8 @@ end
     Hfg = sys_tube.propconvert.PtoHfg.(sys_tube.vapor.P)
     k = sys_tube.vapor.k
     peri = sys_tube.tube.peri
-    δstart = sys_tube.vapor.δstart
-    δend = sys_tube.vapor.δend
+    Afilm_start = sys_tube.vapor.Afilm_start
+    Afilm_end = sys_tube.vapor.Afilm_end
     Lfilm_start = sys_tube.vapor.Lfilm_start
     Lfilm_end = sys_tube.vapor.Lfilm_end
 
@@ -319,8 +317,8 @@ end
     @test all(uu_test2[2*numofslugs+2:2:4*numofslugs]  .== uu_test2[2*numofslugs+1:2:4*numofslugs-1])
 
     # analytical solution for dMdt_latent
-    dMdt_latent_start_analytical = Lfilm_start .* peri .* k ./ δstart ./ Hfg .* ΔT_array
-    dMdt_latent_end_analytical = Lfilm_end .* peri .* k ./ δend ./ Hfg .* ΔT_array
+    dMdt_latent_start_analytical = Lfilm_start .* peri .* k ./ (Afilm_start ./ peri) ./ Hfg .* ΔT_array
+    dMdt_latent_end_analytical = Lfilm_end .* peri .* k ./ (Afilm_end ./ peri) ./ Hfg .* ΔT_array
     dMdt_latent_start_positive_analytical = heaviside.(dMdt_latent_start_analytical) .* dMdt_latent_start_analytical
     dMdt_latent_end_positive_analytical = heaviside.(dMdt_latent_end_analytical) .* dMdt_latent_end_analytical
     dMdt_latent_start_negative_analytical = heaviside.(-dMdt_latent_start_analytical) .* dMdt_latent_start_analytical
@@ -343,24 +341,21 @@ end
 
     @test all(isapprox.(uu_test2[4*numofslugs+1:5*numofslugs],dMdt_latent,atol=1e-12)) #dMdt
 
-    F_start = ρₗ .* getδarea.(Ac,d,δstart)
-    F_end = ρₗ .* getδarea.(Ac,d,δend)
+    F_start = ρₗ .* Afilm_start
+    F_end = ρₗ .* Afilm_end
     dLdt_start = -(ηplusvalue.*dMdt_latent_start_positive .+ ηminusvalue.*dMdt_latent_start_negative) ./ F_start
     dLdt_end = -(ηplusvalue.*dMdt_latent_end_positive .+ ηminusvalue.*dMdt_latent_end_negative) ./ F_end
 
     @test all(isapprox.(uu_test2[7*numofslugs+1:8*numofslugs],dLdt_start,atol=1e-12))
     @test all(isapprox.(uu_test2[8*numofslugs+1:9*numofslugs],dLdt_end,atol=1e-12))
 
-    peri_start = peri .* (d .- 2δstart)/d
-    peri_end = peri .* (d .- 2δend)/d
+    C_start = ρₗ
+    C_end = ρₗ
+    dAdt_start = -(dMdt_latent_start .+ dLdt_start.*F_start) ./ C_start ./ Lfilm_start
+    dAdt_end = -(dMdt_latent_end .+ dLdt_end.*F_end) ./ C_end ./ Lfilm_end
 
-    C_start = ρₗ .* peri_start
-    C_end = ρₗ .* peri_end
-    dδdt_start = -(dMdt_latent_start .+ dLdt_start.*F_start) ./ C_start ./ Lfilm_start
-    dδdt_end = -(dMdt_latent_end .+ dLdt_end.*F_end) ./ C_end ./ Lfilm_end
-
-    @test all(isapprox.(uu_test2[5*numofslugs+1:6*numofslugs], dδdt_start,atol=1e-12))
-    @test all(isapprox.(uu_test2[6*numofslugs+1:7*numofslugs], dδdt_end,atol=1e-12))
+    @test all(isapprox.(uu_test2[5*numofslugs+1:6*numofslugs], dAdt_start,atol=1e-12))
+    @test all(isapprox.(uu_test2[6*numofslugs+1:7*numofslugs], dAdt_end,atol=1e-12))
 
 end
 
@@ -376,8 +371,8 @@ end
     for Xmag in [-1.0,1.0]
         sys_tube = initialize_ohpsys(sys_plate,p_fluid,power,slugnum=numofslugs,ηplus=ηplusvalue)
 
-        sys_tube.vapor.δstart .= zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) # initial velocity of the slugs
-        sys_tube.vapor.δend .= zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) # initial velocity of the slugs
+        sys_tube.vapor.Afilm_start .= sys_tube.tube.peri .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
+        sys_tube.vapor.Afilm_end .= sys_tube.tube.peri .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
         sys_tube.liquid.dXdt[1:5] = [zero.(X) .+ Xmag .* rand() for X in sys_tube.liquid.dXdt[1:5]]# initial velocity of the slugs
 
 
@@ -393,8 +388,8 @@ end
         Hfg = sys_tube.propconvert.PtoHfg.(sys_tube.vapor.P)
         k = sys_tube.vapor.k
         peri = sys_tube.tube.peri
-        δstart = sys_tube.vapor.δstart
-        δend = sys_tube.vapor.δend
+        Afilm_start = sys_tube.vapor.Afilm_start
+        Afilm_end = sys_tube.vapor.Afilm_end
         Lfilm_start = sys_tube.vapor.Lfilm_start
         Lfilm_end = sys_tube.vapor.Lfilm_end
 
@@ -411,11 +406,8 @@ end
         Adeposit_right = [elem[2] for elem in Adeposit]
         V_normal_start = circshift(Ac ./ (Ac .- Adeposit_right) .*  V,1)
         V_normal_end = Ac ./ (Ac .- Adeposit_left) .*  V
-
-        Astart = getδarea.(Ac,d,δstart)
-        Aend = getδarea.(Ac,d,δend)
-        V_start_case5 = Ac / (Ac - Aend[5]) *  V[4]
-        V_end_case5   = Ac / (Ac - Astart[4]) *  V[4]
+        V_start_case5 = Ac / (Ac - Afilm_end[5]) *  V[4]
+        V_end_case5   = Ac / (Ac - Afilm_start[4]) *  V[4]
 
 
         #case 2 to 5: set different initial film thicknesses
@@ -432,7 +424,7 @@ end
         u_tube = newstate(sys_tube) # initialize OHP tube
 
         uu_test3 = dynamicsmodel(u_tube[1:9*numofslugs],sys_tube)
-        # dX2,ddXdt2,dM2,dδstart2,dδend2,dLfilm_start2,dLfilm_end2 = ComputationalHeatTransfer.u_to_XMδL(uu_test2)
+        # dX2,ddXdt2,dM2,dAfilm_start2,dAfilm_end2,dLfilm_start2,dLfilm_end2 = ComputationalHeatTransfer.u_to_XMAL(uu_test2)
 
         V_start_analytical = zeros(numofslugs)
         V_end_analytical = zeros(numofslugs)
@@ -470,8 +462,8 @@ end
 
 end
 
-# test 4, 2 slugs, with heat transfer, given initial temperature differences, with initial velocity, test mass conservation δ L
-@testset "mass conservation δ L" begin
+# test 4, 2 slugs, with heat transfer, given initial temperature differences, with initial velocity, test mass conservation A L
+@testset "mass conservation A L" begin
 
     ηplusvalue = rand()
     ηminusvalue = 0.0
@@ -498,8 +490,8 @@ end
     Hfg = sys_tube.propconvert.PtoHfg.(sys_tube.vapor.P)
     k = sys_tube.vapor.k
     peri = sys_tube.tube.peri
-    δstart = sys_tube.vapor.δstart
-    δend = sys_tube.vapor.δend
+    Afilm_start = sys_tube.vapor.Afilm_start
+    Afilm_end = sys_tube.vapor.Afilm_end
     Lfilm_start = sys_tube.vapor.Lfilm_start
     Lfilm_end = sys_tube.vapor.Lfilm_end
 
@@ -530,8 +522,8 @@ end
 
     @test all(isapprox.(uu_test2[4*numofslugs+1:5*numofslugs],dMdt_latent,atol=1e-12)) #dMdt
 
-    F_start = ρₗ .* getδarea.(Ac,d,δstart)
-    F_end = ρₗ .* getδarea.(Ac,d,δend)
+    F_start = ρₗ .* Afilm_start
+    F_end = ρₗ .* Afilm_end
     dLdt_start_analytical = -(ηplusvalue.*dMdt_latent_start_positive .+ ηminusvalue.*dMdt_latent_start_negative) ./ F_start .- Ac ./ (Ac .- Adeposit_start) .*  circshift(V,-1)
     dLdt_end_analytical  = -(ηplusvalue.*dMdt_latent_end_positive .+ ηminusvalue.*dMdt_latent_end_negative) ./ F_end .+ Ac ./ (Ac .- Adeposit_end) .*  V
 
@@ -540,21 +532,18 @@ end
     @test all(isapprox.(dLdt_start_analytical,dLdt_start,atol=1e-12))
     @test all(isapprox.(dLdt_end_analytical,dLdt_end,atol=1e-12))
 
-    peri_start = peri .* (d .- 2δstart)/d
-    peri_end = peri .* (d .- 2δend)/d
+    C_start = ρₗ
+    C_end = ρₗ
+    dAdt_start = -(dMdt_latent_start .+ dLdt_start.*F_start) ./ C_start ./ Lfilm_start
+    dAdt_end = -(dMdt_latent_end .+ dLdt_end.*F_end) ./ C_end ./ Lfilm_end
 
-    C_start = ρₗ .* peri_start
-    C_end = ρₗ .* peri_end
-    dδdt_start = -(dMdt_latent_start .+ dLdt_start.*F_start) ./ C_start ./ Lfilm_start
-    dδdt_end = -(dMdt_latent_end .+ dLdt_end.*F_end) ./ C_end ./ Lfilm_end
+    dAdt_start = uu_test2[5*numofslugs+1:6*numofslugs]
+    dAdt_end = uu_test2[6*numofslugs+1:7*numofslugs]
+    # @test all(isapprox.(uu_test2[5*numofslugs+1:6*numofslugs], dAdt_start,atol=1e-12))
+    # @test all(isapprox.(uu_test2[6*numofslugs+1:7*numofslugs], dAdt_end,atol=1e-12))
 
-    dδdt_start = uu_test2[5*numofslugs+1:6*numofslugs]
-    dδdt_end = uu_test2[6*numofslugs+1:7*numofslugs]
-    # @test all(isapprox.(uu_test2[5*numofslugs+1:6*numofslugs], dδdt_start,atol=1e-12))
-    # @test all(isapprox.(uu_test2[6*numofslugs+1:7*numofslugs], dδdt_end,atol=1e-12))
-
-    dMdt_start_lhs = F_start .* dLdt_start .+ C_start .* Lfilm_start .* dδdt_start
-    dMdt_end_lhs = F_end .* dLdt_end .+ C_end .* Lfilm_end .* dδdt_end
+    dMdt_start_lhs = F_start .* dLdt_start .+ C_start .* Lfilm_start .* dAdt_start
+    dMdt_end_lhs = F_end .* dLdt_end .+ C_end .* Lfilm_end .* dAdt_end
     dMdt_start_rhs = -dMdt_latent_start - ρₗ .* Adeposit_start .* Ac ./ (Ac .- Adeposit_start) .*  circshift(V,-1)
     dMdt_end_rhs = -dMdt_latent_end + ρₗ .* Adeposit_end .* Ac ./ (Ac .- Adeposit_end) .*  V
 
@@ -648,8 +637,8 @@ end
     sys_tube = initialize_ohpsys(sys_plate,p_fluid,power,Rn_boil=Rn_disable, slugnum=numofslugs,ηplus=ηplusvalue)
 
     for casei in [1,2,3,4,5]
-        sys_tube.vapor.δstart .= zeros(numofslugs) .+ 1e-5 .+ 0e-5 .* rand(numofslugs) # initial velocity of the slugs
-        sys_tube.vapor.δend .= zeros(numofslugs) .+ 1e-5 .+ 0e-5 .* rand(numofslugs) # initial velocity of the slugs
+        sys_tube.vapor.Afilm_start .= sys_tube.tube.peri .* (zeros(numofslugs) .+ 1e-5 .+ 0e-5 .* rand(numofslugs) ) # initial film area
+        sys_tube.vapor.Afilm_end .= sys_tube.tube.peri .* (zeros(numofslugs) .+ 1e-5 .+ 0e-5 .* rand(numofslugs) ) # initial film area
         # 0.0 need to be replaced by 1.0
         sys_tube.liquid.dXdt[1:numofslugs] = [zero.(X) .- 1 for X in sys_tube.liquid.dXdt[1:numofslugs]]# initial velocity of the slugs
         if casei == 1

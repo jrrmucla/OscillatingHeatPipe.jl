@@ -313,20 +313,18 @@ Return the volumes of the vapor regions, given the tube system `sys`.
 function getVolumevapor(sys)
     @unpack tube, vapor, liquid = sys
     @unpack Ac, L, d, closedornot = tube
-    @unpack δstart, δend, Lfilm_start, Lfilm_end = vapor
+    @unpack Afilm_start, Afilm_end, Lfilm_start, Lfilm_end = vapor
     @unpack Xp = liquid
     
     Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
-    Astart = getδarea.(Ac,d,δstart)
-    Aend = getδarea.(Ac,d,δend)
     
-    return _getVolumevapor.(Ac,Astart,Aend,Lvaporplug,Lfilm_start,Lfilm_end)
+    return _getVolumevapor.(Ac,Afilm_start,Afilm_end,Lvaporplug,Lfilm_start,Lfilm_end)
 
 end
 
 
-_getVolumevapor(Ac,Astart,Aend,Lvaporplug,Lfilm_start,Lfilm_end) = 
-                        Ac * Lvaporplug - Astart * Lfilm_start - Aend * Lfilm_end
+_getVolumevapor(Ac,Afilm_start,Afilm_end,Lvaporplug,Lfilm_start,Lfilm_end) = 
+                        Ac * Lvaporplug - Afilm_start * Lfilm_start - Afilm_end * Lfilm_end
 
 
 
@@ -338,13 +336,10 @@ Return the masses of all of the liquid films in the system.
 function getMfilm(sys)
     @unpack tube, vapor, liquid = sys
     @unpack Ac, d = tube
-    @unpack δstart, δend, Lfilm_start, Lfilm_end = vapor
+    @unpack Afilm_start, Afilm_end, Lfilm_start, Lfilm_end = vapor
     @unpack ρₗ = liquid
 
-    Astart = getδarea.(Ac,d,δstart)
-    Aend = getδarea.(Ac,d,δend)
-
-    return _getM.(ρₗ,Astart,Lfilm_start), _getM.(ρₗ,Aend,Lfilm_end)
+    return _getM.(ρₗ,Afilm_start,Lfilm_start), _getM.(ρₗ,Afilm_end,Lfilm_end)
 end
 
 """
@@ -391,8 +386,8 @@ function get_area_of_newly_deposited_films(sys)
     Ac= sys.tube.Ac
     d = sys.tube.d
     closedornot = sys.tube.closedornot
-    δstart = sys.vapor.δstart
-    δend = sys.vapor.δend
+    Afilm_start = sys.vapor.Afilm_start
+    Afilm_end = sys.vapor.Afilm_end
 
     num_liquid_slugs = length(dXdt)
 
@@ -407,11 +402,9 @@ function get_area_of_newly_deposited_films(sys)
     δdeposit = Catoδ(d,Ca,adjust_factor=ad_fac)
 
     # Areas of deposited films
-    δdepositArea = getδarea.(Ac,d,δdeposit)
+    δdepositArea = sys.tube.peri * δdeposit
 
     # Areas of existing films
-    δarea_start = getδarea.(Ac,d,δstart)
-    δarea_end = getδarea.(Ac,d,δend)
 
 # need to initialize it later on
     loop_plus_index = circshift(1:num_liquid_slugs,-1)
@@ -424,9 +417,9 @@ if closedornot == true
     for i in eachindex(Adeposit)
 
         # film behind slug. use "end" film from vapor region i if slug not depositing.
-        Adeposit_left = dXdt[i][1] > 0 ? δdepositArea : δarea_end[i]
+        Adeposit_left = dXdt[i][1] > 0 ? δdepositArea : Afilm_end[i]
         # film in front of slug. use "start" film from vapor region i+1 if slug not depositing.
-        Adeposit_right = dXdt[i][end] < 0 ? δdepositArea : δarea_start[loop_plus_index[i]]
+        Adeposit_right = dXdt[i][end] < 0 ? δdepositArea : Afilm_start[loop_plus_index[i]]
 
         Adeposit[i]  =   (Adeposit_left, Adeposit_right)
     end
@@ -435,9 +428,9 @@ else
     Adeposit[end] = (0.0,0.0)
     for i in eachindex(Adeposit[2:end-1])
         # film behind slug. use "end" film from vapor region i if slug not depositing.
-        Adeposit_left = dXdt[i][1] > 0 ? δdepositArea : δarea_end[i]
+        Adeposit_left = dXdt[i][1] > 0 ? δdepositArea : Afilm_end[i]
         # film in front of slug. use "start" film from vapor region i+1 if slug not depositing.
-        Adeposit_right = dXdt[i][end] < 0 ? δdepositArea : δarea_start[i+1]
+        Adeposit_right = dXdt[i][end] < 0 ? δdepositArea : Afilm_start[i+1]
 
         Adeposit[i]  =   (Adeposit_left, Adeposit_right)
     end
@@ -506,15 +499,12 @@ function systoM(sys0::PHPSystem)
 
     @unpack Ac,d,L,closedornot = sys0.tube
     @unpack Xp = sys0.liquid
-    @unpack δstart,δend,Lfilm_start,Lfilm_end,P = sys0.vapor
+    @unpack Afilm_start,Afilm_end,Lfilm_start,Lfilm_end,P = sys0.vapor
     @unpack PtoD = sys0.propconvert
 
     Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
 
-    δarea_start = getδarea.(Ac,d,δstart)
-    δarea_end   = getδarea.(Ac,d,δend)
-
-    volume_vapor = Lvaporplug .* Ac .- Lfilm_start .* δarea_start .- Lfilm_end .* δarea_end
+    volume_vapor = Lvaporplug .* Ac .- Lfilm_start .* Afilm_start .- Lfilm_end .* Afilm_end
 
     M = PtoD.(P) .* volume_vapor
 end

@@ -157,11 +157,11 @@ function getδ(sysfinal)
     δ_avg_end = Float64[]
 
     for sysfinali in sysfinal
-        δstart = sysfinali.vapor.δstart
-        δend = sysfinali.vapor.δend
+        Afilm_start = sysfinali.vapor.Afilm_start
+        Afilm_end = sysfinali.vapor.Afilm_end
 
-        push!(δ_avg_start, mean(δstart))
-        push!(δ_avg_end, mean(δend))
+        push!(δ_avg_start, mean(Afilm_start) / sysfinali.tube.peri)
+        push!(δ_avg_end, mean(Afilm_end) / sysfinali.tube.peri)
     end
 
     δ_avg_start,δ_avg_end

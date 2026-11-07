@@ -187,11 +187,11 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     Lvaporplug = XptoLvaporplug(X0,L,tube.closedornot)
     P_initial = zero(Lvaporplug) .+ TtoP(Tref)
     δfilm = δfilm_relative * d/2
-    δstart_initial = zero(Lvaporplug) .+ δfilm
-    δend_initial   = zero(Lvaporplug) .+ δfilm
+    Afilm_start_initial = zero(Lvaporplug) .+ peri * δfilm
+    Afilm_end_initial   = zero(Lvaporplug) .+ peri * δfilm
     Lfilm_start_initial = 0.5 .* film_fraction .* Lvaporplug
     Lfilm_end_initial   = deepcopy(Lfilm_start_initial)
-    vapors=Vapor(ad_fac=inertia_f,k = p_fluid.kₗ,P=P_initial,δstart=δstart_initial,δend=δend_initial,Lfilm_start=Lfilm_start_initial,Lfilm_end=Lfilm_end_initial,Eratio_plus=ηplus,Eratio_minus=ηminus);
+    vapors=Vapor(ad_fac=inertia_f,k = p_fluid.kₗ,P=P_initial,Afilm_start=Afilm_start_initial,Afilm_end=Afilm_end_initial,Lfilm_start=Lfilm_start_initial,Lfilm_end=Lfilm_end_initial,Eratio_plus=ηplus,Eratio_minus=ηminus);
 
     # Wall
     Xstations = sort(rand(nucleatenum) .* L);

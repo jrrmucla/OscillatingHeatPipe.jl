@@ -20,14 +20,14 @@ function sys_interpolation_openloop(sys)
     @unpack PtoT = sys.propconvert
     θ = PtoT.(sys.vapor.P)
     P = sys.vapor.P
-    δstart = sys.vapor.δstart
-    δend = sys.vapor.δend
+    Afilm_start = sys.vapor.Afilm_start
+    Afilm_end = sys.vapor.Afilm_end
     Lfilm_start = sys.vapor.Lfilm_start
     Lfilm_end = sys.vapor.Lfilm_end
     Xpvapor = getXpvapor(Xp,sys.tube.closedornot)
 
-    H_film_start = Hfilm.(δstart,[sys])
-    H_film_end = Hfilm.(δend,[sys])
+    H_film_start = Hfilm.(Afilm_start ./ sys.tube.peri,[sys])
+    H_film_end = Hfilm.(Afilm_end ./ sys.tube.peri,[sys])
     H_vapor = sys.vapor.Hᵥ
     H_liquid = sys.liquid.Hₗ
 
@@ -69,6 +69,7 @@ function sys_interpolation_openloop(sys)
 
     extend_wall_Xarray = [0.0;sys.wall.Xarray;sys.tube.L]
     extend_wall_θarray = [(sys.wall.θarray[1]+sys.wall.θarray[end])/2;sys.wall.θarray;(sys.wall.θarray[1]+sys.wall.θarray[end])/2]
+    extend_wall_curvarray = [(sys.wall.curvarray[1]+sys.wall.curvarray[end])/2;sys.wall.curvarray;(sys.wall.curvarray[1]+sys.wall.curvarray[end])/2]
 
     Interpolations.deduplicate_knots!(X_inner,move_knots = true)
     Interpolations.deduplicate_knots!(extend_wall_Xarray,move_knots = true)
@@ -80,10 +81,12 @@ function sys_interpolation_openloop(sys)
 
     θ_interp_walltoliquid = linear_interpolation(extend_wall_Xarray, extend_wall_θarray);
 
+    curv_interp_walltoliquid = linear_interpolation(extend_wall_Xarray, extend_wall_curvarray)
+
     P_interp_liquidtowall = linear_interpolation(X_inner_pres, P_inner);
 
 
-    return θ_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall
+    return θ_interp_walltoliquid, curv_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall
 
 end
 
@@ -100,14 +103,14 @@ function sys_interpolation_closedloop(sys)
     @unpack PtoT = sys.propconvert
     θ = PtoT.(sys.vapor.P)
     P = sys.vapor.P
-    δstart = sys.vapor.δstart
-    δend = sys.vapor.δend
+    Afilm_start = sys.vapor.Afilm_start
+    Afilm_end = sys.vapor.Afilm_end
     Lfilm_start = sys.vapor.Lfilm_start
     Lfilm_end = sys.vapor.Lfilm_end
     Xpvapor = getXpvapor(Xp,sys.tube.closedornot)
 
-    H_film_start = Hfilm.(δstart,[sys])
-    H_film_end = Hfilm.(δend,[sys])
+    H_film_start = Hfilm.(Afilm_start ./ sys.tube.peri,[sys])
+    H_film_end = Hfilm.(Afilm_end ./ sys.tube.peri,[sys])
     H_vapor = sys.vapor.Hᵥ
     H_liquid = sys.liquid.Hₗ
 

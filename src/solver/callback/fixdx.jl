@@ -69,19 +69,16 @@ function fixdx_affect!(integrator)
     
     Ac = p.tube.Ac
     d = p.tube.d
-    δstart = p.vapor.δstart
-    δend = p.vapor.δend
+    Afilm_start = p.vapor.Afilm_start
+    Afilm_end = p.vapor.Afilm_end
     Lfilm_start = p.vapor.Lfilm_start
     Lfilm_end = p.vapor.Lfilm_end
 
-    δarea_start = Ac .* (1 .- ((d .- 2*δstart) ./ d) .^ 2);
-    δarea_end = Ac .* (1 .- ((d .- 2*δend) ./ d) .^ 2);
-
-    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* δarea_start - Lfilm_end .* δarea_end
+    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Afilm_start - Lfilm_end .* Afilm_end
     @unpack PtoD = p.propconvert
     M = PtoD.(p.vapor.P) .* volume_vapor
 
-    unew=[XMδL_to_u(p.liquid.Xp,p.liquid.dXdt,M,δstart,δend,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
+    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
 
     resize!(integrator.u,size(unew,1)::Int)
     integrator.u = deepcopy(unew)

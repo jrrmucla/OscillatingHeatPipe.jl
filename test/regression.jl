@@ -258,14 +258,14 @@ function compare_regression_state(actual, expected)
     last_mechanical = first(actual_separators) - 1
     @test rem(last_mechanical, 9) in (0, 4)
     rem(last_mechanical, 9) in (0, 4) || return
-    a = OscillatingHeatPipe.u_to_XMδL(actual[1:last_mechanical])
-    b = OscillatingHeatPipe.u_to_XMδL(expected[1:last_mechanical])
+    a = OscillatingHeatPipe.u_to_XMAL(actual[1:last_mechanical])
+    b = OscillatingHeatPipe.u_to_XMAL(expected[1:last_mechanical])
 
     # because our values span so many orders of magnitude, 
     # we use different tolerances for each
-    names = (:positions, :velocities, :vapor_mass, :film_thickness_start,
-             :film_thickness_end, :film_length_start, :film_length_end)
-    atols = (1e-9, 1e-8, 1e-12, 1e-11, 1e-11, 1e-9, 1e-9)
+    names = (:positions, :velocities, :vapor_mass, :film_area_start,
+             :film_area_end, :film_length_start, :film_length_end)
+    atols = (1e-9, 1e-8, 1e-12, 1e-14, 1e-14, 1e-9, 1e-9)
 
     for j in eachindex(names)
         @testset "$(names[j])" begin
