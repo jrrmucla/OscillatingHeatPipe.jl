@@ -32,7 +32,7 @@ function _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposi
 
     dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive = dMdtdynamicsmodel(Xpvapor,sys)
     dMdt_latent_start_negative = dMdt_latent_start .- dMdt_latent_start_positive
-    dMdt_latent_end_negative =   dMdt_latent_end   .- dMdt_latent_end_positive
+    dMdt_latent_end_negative   = dMdt_latent_end   .- dMdt_latent_end_positive
 
     dLdt_start,dLdt_end,dAdt_start,dAdt_end,v_vapor_start_final,v_vapor_end_final = film_dynamics(ρₗ, Ac,dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_start_negative,Eratio_plus,Eratio_minus,
     v_vapor_left_normal,dMdt_latent_end_positive,dMdt_latent_end_negative,v_vapor_right_normal,Adeposit_vapor_start,Adeposit_vapor_end,
@@ -136,18 +136,16 @@ function _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adepo
     return du
 end
 
-
-
 # this is a equation takes the current u and returns du/dt, p was already updated from the current u.
 """
     This equation takes the current state vector (u) and returns du/dt
 """
-function dynamicsmodel(u::Array{Float64,1}, php_sys::PHPSystem)
+function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
     
     du = zeros(size(u))
 
-    # extracts essential information stored at sys::PHPSystem
-    sys :: PHPSystem = php_sys
+    # extracts essential information stored at sys::UniformPhpSystem
+    sys :: UniformPhpSystem = php_sys
     @unpack d,peri,Ac,g,L,closedornot = sys.tube
     @unpack σ,μₗ,ρₗ,Xp,dXdt = sys.liquid
     @unpack P,Eratio_plus,Eratio_minus,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end,ad_fac = sys.vapor
@@ -306,7 +304,7 @@ function case_flags(Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshol
     return he_matrix_start,he_matrix_end
 end
 
-function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::PHPSystem)
+function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::UniformPhpSystem)
 
     dMdt_latent_start=zeros(length(Xpvapor))
     dMdt_latent_end=zeros(length(Xpvapor))
@@ -384,7 +382,7 @@ end
     Models thermal energy within liquid slugs.
     Reference: (9) Yuxuan 2024
 """
-function liquidmodel(p::PHPSystem)
+function liquidmodel(p::UniformPhpSystem)
     @unpack θarrays,Xarrays,Hₗ,αₗ,Cpₗ,ρₗ = p.liquid
     @unpack Ac,L,peri = p.tube
     @unpack θ_interp_walltoliquid = p.mapping
@@ -431,7 +429,7 @@ end
 
 
 # q'
-function sys_to_heatflux(p::PHPSystem)
+function sys_to_heatflux(p::UniformPhpSystem)
     @unpack θarray,Xarray = p.wall
     @unpack peri = p.tube
     @unpack θ_interp_liquidtowall,H_interp_liquidtowall = p.mapping
@@ -446,7 +444,7 @@ function integrator_to_heatflux(inte)
     sys_to_heatflux(inte.p)
 end
 
-function sys_to_Harray(p::PHPSystem)
+function sys_to_Harray(p::UniformPhpSystem)
 
     sys = p
 

@@ -1,4 +1,50 @@
-export constructmapping,sys_interpolation,slug_interp
+export initialize_interpolations, refresh_interpolations, slug_interp
+
+"""
+    initialize_interpolations(sys::AbstractPHP, map_ξ_to_heightg::AbstractInterpolation)
+
+Returns a Mapping for sys. Creates interpolations for wall, fluid, geometry (Dh, Pc, Ac). Uniform tubes
+use `nothing` for the geometry interpolants. Just stores the gravitational
+potential interpolant.
+
+After initialization, use `refresh_interpolations(sys)` to reuse the
+fixed tube geometry instead of constructing it again.
+"""
+function initialize_interpolations(sys::AbstractPHP, map_ξ_to_heightg::AbstractInterpolation)
+    geometry = construct_geometric_interpolations(sys.tube)
+    return assemble_interpolations(sys, map_ξ_to_heightg, geometry)
+end
+
+"""
+    refresh_interpolations(sys::AbstractPHP)
+
+Return a new Mapping using the current wall and fluid state. Rebuilds wall and fluid interps. 
+Does not rebuild geometric interps or the gravity-potential interp.
+"""
+function refresh_interpolations(sys::AbstractPHP)
+    mapping = sys.mapping
+    geometry = (mapping.Dh_tube_to_liquid, mapping.Pc_tube_to_liquid,
+                mapping.Ac_tube_to_liquid)
+    return assemble_interpolations(sys, mapping.heightg_interp, geometry)
+end
+
+function assemble_interpolations(sys::AbstractPHP, map_ξ_to_heightg::AbstractInterpolation,
+                                  geometry::Tuple)
+    map_ξ_to_θw, map_ξ_to_wall_curvature, map_ξ_to_θf, map_ξ_to_Hf, map_ξ_to_Pf =
+        sys_interpolation(sys)
+    return Mapping(map_ξ_to_θw, map_ξ_to_wall_curvature,
+                   map_ξ_to_θf, map_ξ_to_Hf, map_ξ_to_Pf,
+                   map_ξ_to_heightg, geometry...)
+end
+
+construct_geometric_interpolations(::UniformTube) = (nothing, nothing, nothing)
+
+function construct_geometric_interpolations(tube::VariableTube)
+    map_ξ_to_Dh = linear_interpolation(tube.ξ_geometric_knots, tube.Dh_geometric_knots)
+    map_ξ_to_Pc = linear_interpolation(tube.ξ_geometric_knots, tube.Pc_geometric_knots)
+    map_ξ_to_Ac = linear_interpolation(tube.ξ_geometric_knots, tube.Ac_geometric_knots)
+    return map_ξ_to_Dh, map_ξ_to_Pc, map_ξ_to_Ac
+end
 
 function sys_interpolation(sys)
     if sys.tube.closedornot == true
@@ -92,6 +138,9 @@ end
 
 
 function sys_interpolation_closedloop(sys)
+    # this function (and its openloop twin) 
+    # is my op for a variety of reasons
+    # count your days, sys_interpolation_closedloop.... a refactor is coming...
     X_inner = Array{Float64}(undef, 0)
     θ_inner = Array{Float64}(undef, 0)
     H_inner = Array{Float64}(undef, 0)
@@ -287,7 +336,7 @@ function XHloop_append(i,H_film_start,H_film_end,sys)
 return X_inner_loop_append,H_inner_loop_append
 end
 
-function slug_interp(sys::PHPSystem)
+function slug_interp(sys::UniformPhpSystem)
         filmLend = sys.vapor.Lfilm_end
     filmLstart = sys.vapor.Lfilm_start
     # Xpstart = [elem[1] for elem in sys.liquid.Xp]

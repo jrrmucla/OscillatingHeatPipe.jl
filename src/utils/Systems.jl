@@ -1,9 +1,9 @@
-export PHPSystem_nomapping,PHPSystem,Tube,Liquid,Vapor,Wall,PropConvert,Mapping,Cache
+export UniformPhpSystem_nomapping,UniformPhpSystem,UniformTube,Liquid,Vapor,Wall,PropConvert,Mapping,Cache
 
 using Parameters
 
 """
-Tube is a struct containing tube geometries
+UniformTube is a struct containing tube geometries
     d           ::Float64   tube characteristic diameter
     peri        ::Float64   tube perimeter (may be an arbitrary shape so cannot be derived from d)
     Ac          ::Float64   tube cross-sectional area
@@ -11,7 +11,7 @@ Tube is a struct containing tube geometries
     g           ::Float64   gravity vector along the plate
     closedornot ::Bool      if the tube is closed loop or not (open loop)
 """
-struct Tube
+struct UniformTube
     d::Float64
     peri::Float64
     Ac::Float64
@@ -19,6 +19,16 @@ struct Tube
     g::Vector{Float64}
     closedornot::Bool
     N::Int64  
+end
+
+struct VariableTube
+    ξ_geometric_knots::Array{Float64,1}
+    Dh_geometric_knots::Array{Float64,1}
+    Pc_geometric_knots::Array{Float64,1}
+    Ac_geometric_knots::Array{Float64,1}
+    g::Vector{Float64}
+    closedornot::Bool
+    N::Int64
 end
 
 struct PropConvert
@@ -121,6 +131,9 @@ mutable struct Mapping
     H_interp_liquidtowall    :: AbstractInterpolation
     P_interp_liquidtowall    :: AbstractInterpolation
     heightg_interp           :: AbstractInterpolation
+    Dh_tube_to_liquid           :: Union{Nothing,AbstractInterpolation}
+    Pc_tube_to_liquid           :: Union{Nothing,AbstractInterpolation}
+    Ac_tube_to_liquid           :: Union{Nothing,AbstractInterpolation}
 end
 
 """
@@ -135,15 +148,15 @@ end
 abstract type AbstractPHP end
 
 """
-PHPSystem is a struct containing
-    tube    ::Tube
+UniformPhpSystem is a struct containing
+    tube    ::UniformTube
     liquid  ::Liquid
     vapor   ::Vapor
     wall    ::Wall
     mapping ::Mapping
 """
-mutable struct PHPSystem <: AbstractPHP
-    tube    ::Tube
+mutable struct UniformPhpSystem <: AbstractPHP
+    tube    ::UniformTube
     liquid  ::Liquid
     vapor   ::Vapor
     wall    ::Wall
@@ -153,22 +166,35 @@ mutable struct PHPSystem <: AbstractPHP
 end
 
 """
-PHPSystem_nomapping is a struct containing
-    Tube
+This oscillating heat pipe system supports area changes along the ξ direction.
+"""
+mutable struct VariableAreaPhpSystem <: AbstractPHP
+    tube    ::VariableTube
+    liquid  ::Liquid
+    vapor   ::Vapor
+    wall    ::Wall
+    propconvert :: PropConvert
+    mapping ::Mapping
+    cache   ::Cache
+end
+
+"""
+UniformPhpSystem_nomapping is a struct containing
+    UniformTube
     Liquid
     Vapor
     Wall
-It is used to construct PHPSystem, no other use.
+It is used to construct UniformPhpSystem, no other use.
 """
-mutable struct PHPSystem_nomapping <: AbstractPHP
-    tube    ::Tube
+mutable struct UniformPhpSystem_nomapping <: AbstractPHP
+    tube    ::UniformTube
     liquid  ::Liquid
     vapor   ::Vapor
     wall    ::Wall
     propconvert :: PropConvert
 end
 
-function Base.show(io::IO, sys::PHPSystem)
+function Base.show(io::IO, sys::UniformPhpSystem)
     N = sys.tube.N
     fluidtype = sys.propconvert.fluid_type
     println(io, "$N point OHP system filled with $fluidtype")

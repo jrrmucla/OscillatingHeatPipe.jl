@@ -6,7 +6,7 @@ export SimulationResult,onesideXp,randomXp,initialize_ohpsys,store!
 a more general way to generate the liquid slugs
 """
 
-function onesideXp(ohp,tube::Tube,line)
+function onesideXp(ohp,tube::UniformTube,line)
     
     A = line[1]
     B = line[2]
@@ -45,7 +45,7 @@ It outputs: an array of tuple of the liquid slug start/end arc length coordinate
 an array of slug velocities of the same length but set to zero, and 
 the actual volume fraction of the constructed liquid slugs.
 """
-function randomXp(tube::Tube; kwargs...)
+function randomXp(tube::UniformTube; kwargs...)
     @unpack L,d,closedornot = tube
 
     randomXp(L::Real,d::Real,closedornot::Bool; kwargs...)
@@ -133,9 +133,9 @@ end
                                                     nucleatenum=250,
                                                     L_newbubble=6e-3,
                                                     ch_ratio=0.42,
-                                                    σcharge=0.01]) -> PHPSystem
+                                                    σcharge=0.01]) -> UniformPhpSystem
 
-Constructor for the `PHPSystem` type, to initialize an OHP system.
+Constructor for the `UniformPhpSystem` type, to initialize an OHP system.
 Initializes the tube, liquid slugs, vapor regions, wall, and the mappings.
 The inputs are `sys` the embedding substrate of type `ILMSystem` (which is expected to contain the
 OHP geometry as a line source as the last element in the heating models array),
@@ -167,12 +167,12 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     # an interpolation between different working fluid propeties (currently assuming saturated gas curve)
     propconvert = PropConvert(fluid_type)
 
-    # Tube
+    # UniformTube
     ohp = _get_ohp_from_forcing_list(sys)
     L = arclength(ohp.shape)            # total length of the pipe when streched to a 1D pipe (an approximate here)
     N = numpts(ohp.shape)                      # number of ohp points
     peri,Ac = peri_Ac(d,tubeshape)
-    tube = Tube(d,peri,Ac,L,g,closedornot,N);
+    tube = UniformTube(d,peri,Ac,L,g,closedornot,N);
 
     # Liquid
     Hₗ = p_fluid.kₗ/d * Nu # Nusselt number given
@@ -203,8 +203,7 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
 
     # Mapping
     @unpack x,y = ohp.transform(ohp.shape)
-    sys0_nomapping = PHPSystem_nomapping(tube,liquids,vapors,wall,propconvert);
-    θ_interp_walltoliquid, curv_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall = sys_interpolation(sys0_nomapping)
+    sys0_nomapping = UniformPhpSystem_nomapping(tube,liquids,vapors,wall,propconvert);
     
     # Gravitational Potential (as a function of space and time)
     # we require the mapping function's signiture ~ fn(g, x, y)
@@ -212,7 +211,7 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     ht = g_potential_fn(g,x,y)
     heightg_interp = linear_interpolation(Xwallarray,ht,extrapolation_bc = Line())
     
-    mapping = Mapping(θ_interp_walltoliquid, curv_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall,heightg_interp);
+    mapping = initialize_interpolations(sys0_nomapping, heightg_interp)
 
     # Cache
     Mfilm_left, Mfilm_right = getMfilm(sys0_nomapping)
@@ -220,8 +219,8 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     boil_hist_int = []
     cache = Cache(boil_hist_int,totalmass)
 
-    # PHPSystem
-    sys0 = PHPSystem(tube,liquids,vapors,wall,propconvert,mapping,cache);
+    # UniformPhpSystem
+    sys0 = UniformPhpSystem(tube,liquids,vapors,wall,propconvert,mapping,cache);
 
     sys0
 end

@@ -26,7 +26,7 @@ function slugbc_affect!(integrator)
 end
 
 
-function getadjacentT(p::PHPSystem,i::Int64)
+function getadjacentT(p::UniformPhpSystem,i::Int64)
     @unpack PtoT = p.propconvert
     Tfirst = PtoT(p.vapor.P[i])
 

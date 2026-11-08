@@ -234,10 +234,7 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
     sysnew.liquid.Xarrays = Xarraysnew
     sysnew.liquid.θarrays = θarraysnew
 
-    θ_interp_walltoliquid, curv_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall = sys_interpolation(sysnew)
-    heightg_interp = sysnew.mapping.heightg_interp
-    sysnew.mapping = Mapping(θ_interp_walltoliquid, curv_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall,heightg_interp)
-    # sysnew.mapping = Mapping(θ_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall)
+    sysnew.mapping = refresh_interpolations(sysnew)
 
 return sysnew
 end
@@ -406,7 +403,7 @@ function suitable_for_boiling(p,i)
     return suitable_flag
 end
 
-function get_vapor_energy(sys0::PHPSystem)
+function get_vapor_energy(sys0::UniformPhpSystem)
     Ac = sys0.tube.Ac
     d = sys0.tube.d
 
@@ -431,7 +428,7 @@ function get_vapor_energy(sys0::PHPSystem)
     sum(U)
 end
 
-function get_liquid_energy(sys0::PHPSystem)
+function get_liquid_energy(sys0::UniformPhpSystem)
     Ac = sys0.tube.Ac
     ρ = sys0.liquid.ρₗ
     Cp = sys0.liquid.Cpₗ

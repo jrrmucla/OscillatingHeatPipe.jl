@@ -5,7 +5,7 @@ export ODE_innertube,ODE_steadyfilm,timemarching!
 """
     ODE_innertube(u,p,t)
 The ODE function for the tube system, to be used in `ODEProblem`.
-It takes the current state vector `u`, the parameter struct `p` (which is a `PHPSystem`), and the current time `t`.
+It takes the current state vector `u`, the parameter struct `p` (which is a `UniformPhpSystem`), and the current time `t`.
 It returns the time derivative of the state vector `du`.
 `p` is used as the input for the dynamicsmodel and liquidmodel to get the current system state. Needs to be updated
     everytime this function is called. When called by the ODE solver, `p` is not updated automatically when `u` is 
@@ -79,7 +79,7 @@ function timemarching!(integrator_tube::ODEIntegrator,integrator_plate::ODEInteg
     integrator_tube,integrator_plate
 end
 
-function init(u_tube::Vector{Float64},tspan::Tuple{Any, Any},sys_tube::PHPSystem,kwargs...)
+function init(u_tube::Vector{Float64},tspan::Tuple{Any, Any},sys_tube::UniformPhpSystem,kwargs...)
     
     cb_boiling =  DiscreteCallback(boiling_condition,boiling_affect!)
     cb_liquidmerging =  DiscreteCallback(merging_condition,merging_affect!)

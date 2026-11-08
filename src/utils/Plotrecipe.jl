@@ -1,10 +1,11 @@
 import Plots: mm,palette,text
 
-export OHP,OHPTemp,OHPSlug,OHPPres,OHPSuper,OHP2DΔT,OHPTexp,OHPTcurve,OHPCond,OHPV,OHP1DT,OHP1DP,OHP1DΔT,OHPTwall
+export OHP,OHPArea,OHPTemp,OHPSlug,OHPPres,OHPSuper,OHP2DΔT,OHPTexp,OHPTcurve,OHPCond,OHPV,OHP1DT,OHP1DP,OHP1DΔT,OHPTwall
 
 mutable struct OHP end
 
 mutable struct OHPTemp end
+mutable struct OHPArea end
 mutable struct OHPSlug end
 mutable struct OHPPres end
 mutable struct OHPSuper end
@@ -77,6 +78,49 @@ end
     linecolor := palette([:blue,:red], 2)
     
     ohp
+end
+
+@recipe function f(::OHPArea, x::AbstractVector, y::AbstractVector,
+                   xf::Real, yf::Real, tube::Union{UniformTube,VariableTube})
+    OHPArea(), [x; xf], [y; yf], tube
+end
+
+@recipe function f(::OHPArea, centerline_x::AbstractVector,
+                   centerline_y::AbstractVector, tube::Union{UniformTube,VariableTube})
+    length(centerline_x) == length(centerline_y) ||
+        throw(ArgumentError("centerline x and y coordinates must have equal lengths"))
+    length(centerline_x) >= 2 ||
+        throw(ArgumentError("the centerline must contain at least two points"))
+    distance = [0.0; cumsum(hypot.(diff(centerline_x), diff(centerline_y)))]
+    if tube isa VariableTube
+        area_interpolation = construct_geometric_interpolations(tube)[3]
+        isapprox(last(distance), last(tube.ξ_geometric_knots)) ||
+            throw(ArgumentError("the complete centerline must match the tube geometry length"))
+        # Clamp only the final roundoff difference at the interpolation boundary.
+        distance[end] = last(tube.ξ_geometric_knots)
+        cross_sectional_area = area_interpolation.(distance)
+    else
+        cross_sectional_area = fill(tube.Ac, length(distance))
+    end
+
+    seriestype := :path
+    line_z := cross_sectional_area
+    linecolor --> :Blues
+    # Give constant-area tubes a nonzero color range for the colorbar.
+    minimum_area, maximum_area = tube isa VariableTube ?
+        extrema(tube.Ac_geometric_knots) : (tube.Ac, tube.Ac)
+    clims --> (minimum_area == maximum_area ? (0.0, maximum_area) :
+               (minimum_area, maximum_area))
+    linewidth --> 3
+    aspect_ratio --> :equal
+    legend --> false
+    colorbar --> true
+    colorbar_title --> "Cross-sectional area [m²]"
+    xlabel --> "x [m]"
+    ylabel --> "y [m]"
+    grid --> false
+
+    centerline_x, centerline_y
 end
 
 @recipe function f(::OHPTemp, i::Int64, SimuResult::SimulationResult; plain=false)
@@ -660,7 +704,7 @@ end
     tube_sys.wall.Xarray,SimuResult.tube_hist_θwall[i]
 end
 
-@recipe function f(val::PHPSystem;plottype="T",time=0)
+@recipe function f(val::UniformPhpSystem;plottype="T",time=0)
 
     # T0 = 295.0
     # P0 = 220337
@@ -737,7 +781,7 @@ end
     end
 end
 
-function stackXpTemp(val::PHPSystem)
+function stackXpTemp(val::UniformPhpSystem)
     Xpvapor = getXpvapor(val.liquid.Xp,val.tube.closedornot)
     # θvapor  = nondi_PtoT.(val.vapor.P)
     

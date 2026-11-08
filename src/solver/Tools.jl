@@ -208,7 +208,7 @@ end
 
 
 """
-    Hfilm(δfilm,sys::PHPSystem) -> Float64
+    Hfilm(δfilm,sys::UniformPhpSystem) -> Float64
 
 Return the heat transfer coefficient for the film with thickness `δfilm`
 """
@@ -251,7 +251,7 @@ area `δarea`, return the film thickness.
 getδFromδarea(Ac,d,δarea) = sqrt(δarea/Ac) * d/2
 
 """
-    getMtotal(sys::PHPSystem) -> Scalar
+    getMtotal(sys::UniformPhpSystem) -> Scalar
 
 Return the masses of all of the vapor,liquid, and film regions
 """
@@ -260,7 +260,7 @@ function getMtotal(sys)
 end
 
 """
-    getchargeratio(sys::PHPSystem) -> Scalar
+    getchargeratio(sys::UniformPhpSystem) -> Scalar
 
 Return the chargeratio considering all of the vapor,liquid, and film regions
 """
@@ -274,11 +274,11 @@ function getchargeratio(sys)
 end
 
 """
-    getMtotal(sys::PHPSystem)
+    getMtotal(sys::UniformPhpSystem)
 
 Given tube system `sys`, return the total mass of the all regions.
 """
-function getMtotal(sys0::PHPSystem)
+function getMtotal(sys0::UniformPhpSystem)
 
     Mvapor = sum(getMvapor(sys0))
     Mliquid = sum(getMliquid(sys0))
@@ -288,7 +288,7 @@ function getMtotal(sys0::PHPSystem)
 end
  
 """
-    getMvapor(sys::PHPSystem) -> Vector
+    getMvapor(sys::UniformPhpSystem) -> Vector
 
 Return the masses of all of the vapor regions
 """
@@ -306,7 +306,7 @@ end
 
 
 """
-    getVolumevapor(sys::PHPSystem)
+    getVolumevapor(sys::UniformPhpSystem)
 
 Return the volumes of the vapor regions, given the tube system `sys`.
 """
@@ -329,7 +329,7 @@ _getVolumevapor(Ac,Afilm_start,Afilm_end,Lvaporplug,Lfilm_start,Lfilm_end) =
 
 
 """
-    getMfilm(sys::PHPSystem)
+    getMfilm(sys::UniformPhpSystem)
 
 Return the masses of all of the liquid films in the system.
 """
@@ -343,7 +343,7 @@ function getMfilm(sys)
 end
 
 """
-    getMliquid(sys::PHPSystem)
+    getMliquid(sys::UniformPhpSystem)
 
 Return the masses of all of the liquid slugs in the system.
 """
@@ -491,11 +491,11 @@ function RntoΔT(Rn,Tavg,fluid_type,d,TtoP)
 end
 
 """
-    systoM(sys::PHPSystem)
+    systoM(sys::UniformPhpSystem)
 
 Given tube system `sys`, return the masses of the vapor regions.
 """
-function systoM(sys0::PHPSystem)
+function systoM(sys0::UniformPhpSystem)
 
     @unpack Ac,d,L,closedornot = sys0.tube
     @unpack Xp = sys0.liquid

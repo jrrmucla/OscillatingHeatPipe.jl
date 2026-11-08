@@ -115,13 +115,13 @@ function wallθtovec(θwall::Vector{Float64})
     return [SEPERATION_VAR; θwall]
 end
 
-function newstate(sys0::PHPSystem)
+function newstate(sys0::UniformPhpSystem)
     @unpack Ac,d,L,closedornot = sys0.tube
     @unpack Xp,dXdt = sys0.liquid
     @unpack Afilm_start,Afilm_end,Lfilm_start,Lfilm_end,P = sys0.vapor
     @unpack PtoD = sys0.propconvert
 
-    M = systoM(sys0::PHPSystem)
+    M = systoM(sys0::UniformPhpSystem)
 
     u=[XMAL_to_u(Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
 end
@@ -183,9 +183,7 @@ function getcurrentsys_nowall!(u,sys0)
     sysnew.vapor.Lfilm_start = Lfilm_start
     sysnew.vapor.Lfilm_end = Lfilm_end
 
-    θ_interp_walltoliquid, curv_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall = sys_interpolation(sysnew)
-    heightg_interp = sysnew.mapping.heightg_interp
-    sysnew.mapping = Mapping(θ_interp_walltoliquid, curv_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall,heightg_interp)
+    sysnew.mapping = refresh_interpolations(sysnew)
 
     return sysnew
 end
