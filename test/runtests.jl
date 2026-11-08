@@ -49,6 +49,8 @@ function use_stable_literate_sandbox!()
 end
 
 if GROUP == "All" || GROUP == "Auxiliary"
+    include("film_interfaces.jl")
+    include("initialization.jl")
     include("thermomodel.jl")
     include("correlations.jl")
     include("integrator.jl")

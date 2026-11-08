@@ -1,4 +1,76 @@
 export construct_oneloop_curve,construct_ohp_curve
+export construct_alternating_ohp_curve
+
+"""
+    construct_alternating_ohp_curve(nturn, pitch, height, gap, ds,
+        x0, y0, flipx, flipy, angle, Dh1, Pc1, Ac1, Dh2, Pc2, Ac2;
+        g=[0.0, -9.81], closedornot=true)
+
+Return `(x, y, xf, yf, tube)` using the existing OHP centerline geometry.
+Successive channel rows alternate between `(Dh1, Pc1, Ac1)` and
+`(Dh2, Pc2, Ac2)`. Geometry knots mark only straightaway endpoints, so
+interpolation keeps each straightaway constant and transitions across bends.
+The `VariableTube` can be passed to `VariableAreaPhpSystem`.
+
+For a closed loop, the extended final row and the transverse return use the
+second channel geometry; the final gap straight uses the first. Knot distances
+follow the sampled centerline, including the final segment to `(xf, yf)`.
+`tube.N` is the number of centerline segments; `g` is the gravity vector.
+"""
+function construct_alternating_ohp_curve(nturn, pitch, height, gap, ds,
+        x0, y0, flipx, flipy, angle, Dh1, Pc1, Ac1, Dh2, Pc2, Ac2;
+        g=[0.0, -9.81], closedornot=true)
+    nturn isa Integer && nturn >= 1 || throw(ArgumentError("nturn must be a positive integer"))
+    all(value -> isfinite(value) && value > 0,
+        (pitch, height, ds, Dh1, Pc1, Ac1, Dh2, Pc2, Ac2)) ||
+        throw(ArgumentError("spacing, channel dimensions, and properties must be positive and finite"))
+    isfinite(gap) && gap > 0 || throw(ArgumentError("gap must be positive and finite"))
+    # The existing element helpers need at least two samples per element.
+    ds < min(height, pi * pitch / 2, closedornot ? min(gap, pi * pitch / 4) : height) ||
+        throw(ArgumentError("ds must be smaller than every centerline element"))
+
+    curve_constructor = closedornot ? construct_ohp_curve : construct_ohp_curve_open
+    x, y, xf, yf = curve_constructor(nturn, pitch, height, gap, ds,
+                                    x0, y0, flipx, flipy, angle)
+    centerline_x, centerline_y = [x; xf], [y; yf]
+    distance = [0.0; cumsum(hypot.(diff(centerline_x), diff(centerline_y)))]
+
+    # Each element omits its endpoint, which is the next element's first point.
+    line_segments(length) = ceil(Int, length / ds) - 1
+    halfturn_segments = ceil(Int, pi * pitch / (2ds)) - 1
+    quarterturn_segments = ceil(Int, pi * pitch / (4ds)) - 1
+    straightaways = Tuple{Int,Int,Int}[]
+    start_index = 1
+    row_count = closedornot ? 2nturn + 2 : 2nturn
+    for row in 1:row_count
+        straight_length = closedornot && row == row_count ? height + gap : height
+        end_index = start_index + line_segments(straight_length)
+        push!(straightaways, (start_index, end_index, isodd(row) ? 1 : 2))
+        start_index = end_index + halfturn_segments
+    end
+    if closedornot
+        last_row_end = straightaways[end][2]
+        return_start = last_row_end + quarterturn_segments
+        return_end = return_start + line_segments(2nturn * pitch)
+        push!(straightaways, (return_start, return_end, 2))
+        gap_start = return_end + quarterturn_segments
+        push!(straightaways, (gap_start, length(distance), 1))
+    end
+
+    knot_indices = Int[]
+    channel_indices = Int[]
+    for (start_index, end_index, channel) in straightaways
+        append!(knot_indices, (start_index, end_index))
+        append!(channel_indices, (channel, channel))
+    end
+    diameter = Float64[Dh1, Dh2]
+    perimeter = Float64[Pc1, Pc2]
+    area = Float64[Ac1, Ac2]
+    tube = VariableTube(distance[knot_indices], diameter[channel_indices],
+                        perimeter[channel_indices], area[channel_indices],
+                        Float64.(g), closedornot, length(x))
+    return x, y, xf, yf, tube
+end
 
 function construct_ohp_curve(OHPshape::String,Δx::Real)
 

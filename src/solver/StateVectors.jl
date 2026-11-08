@@ -74,8 +74,9 @@ function u_to_XMAL(u::Array{Float64,1})
         return error("new function error")
     end
 
-    Xp   =   map(tuple, zeros(maxliquidindex), zeros(maxliquidindex))
+    Xp   = map(tuple, zeros(maxliquidindex), zeros(maxliquidindex))
     dXdt = map(tuple, zeros(maxliquidindex), zeros(maxliquidindex))
+    
     for i = 1:maxliquidindex
         # input Xp
         Xp[i] = (u[2*i-1],u[2*i])

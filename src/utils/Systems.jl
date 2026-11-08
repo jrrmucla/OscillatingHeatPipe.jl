@@ -1,4 +1,4 @@
-export UniformPhpSystem_nomapping,UniformPhpSystem,UniformTube,Liquid,Vapor,Wall,PropConvert,Mapping,Cache
+export PhpSystem_nomapping,UniformPhpSystem,UniformTube,Liquid,Vapor,Wall,PropConvert,Mapping,Cache
 
 using Parameters
 
@@ -179,15 +179,15 @@ mutable struct VariableAreaPhpSystem <: AbstractPHP
 end
 
 """
-UniformPhpSystem_nomapping is a struct containing
-    UniformTube
+PhpSystem_nomapping is a struct containing
+    UniformTube or VariableTube
     Liquid
     Vapor
     Wall
-It is used to construct UniformPhpSystem, no other use.
+It is used while initializing either PHP system before its Mapping is available.
 """
-mutable struct UniformPhpSystem_nomapping <: AbstractPHP
-    tube    ::UniformTube
+mutable struct PhpSystem_nomapping <: AbstractPHP
+    tube    ::Union{UniformTube,VariableTube}
     liquid  ::Liquid
     vapor   ::Vapor
     wall    ::Wall

@@ -2,7 +2,7 @@ export getgvec,getgh,delta, # get actrual heightg of the tube
 XptoLvaporplug,XptoLliquidslug,getXpvapor, # transfer Xp to the length of vapors, length of liquids, and Xp for vapor.
 # ifamong,constructXarrays,
 Hfilm,getδarea,getδFromδarea,getMvapor,getMfilm,getMliquid,getMtotal,getchargeratio,getVolumevapor,
-getCa,get_area_of_newly_deposited_films,f_churchill,Catoδ,RntoΔT,systoM
+getCa,f_churchill,Catoδ,RntoΔT,systoM
 
 function getgvec(g0::T,g_angle::T=3/2*π) where {T<:Real}
     g = g0*[cos(g_angle),sin(g_angle)]
@@ -312,13 +312,16 @@ Return the volumes of the vapor regions, given the tube system `sys`.
 """
 function getVolumevapor(sys)
     @unpack tube, vapor, liquid = sys
-    @unpack Ac, L, d, closedornot = tube
+    L = _tube_length(tube)
+    closedornot = tube.closedornot
     @unpack Afilm_start, Afilm_end, Lfilm_start, Lfilm_end = vapor
     @unpack Xp = liquid
     
     Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
     
-    return _getVolumevapor.(Ac,Afilm_start,Afilm_end,Lvaporplug,Lfilm_start,Lfilm_end)
+    interfaces = getXpvapor(Xp, closedornot)
+    tube_volumes = _tube_region_volume.(Ref(tube), first.(interfaces), Lvaporplug)
+    return tube_volumes .- Afilm_start .* Lfilm_start .- Afilm_end .* Lfilm_end
 
 end
 
@@ -335,7 +338,6 @@ Return the masses of all of the liquid films in the system.
 """
 function getMfilm(sys)
     @unpack tube, vapor, liquid = sys
-    @unpack Ac, d = tube
     @unpack Afilm_start, Afilm_end, Lfilm_start, Lfilm_end = vapor
     @unpack ρₗ = liquid
 
@@ -349,12 +351,33 @@ Return the masses of all of the liquid slugs in the system.
 """
 function getMliquid(sys)
     @unpack tube, liquid = sys
-    @unpack Ac, L = tube
+    L = _tube_length(tube)
     @unpack ρₗ, Xp = liquid
 
     Lliquidslug = XptoLliquidslug(Xp,L)
-    return  _getM.(ρₗ,Ac,Lliquidslug)
+    return ρₗ .* _tube_region_volume.(Ref(tube), first.(Xp), Lliquidslug)
 
+end
+
+_tube_region_volume(tube::UniformTube, start, region_length) = tube.Ac * region_length
+
+function _tube_region_volume(tube::VariableTube, start, region_length)
+    tube_length = _tube_length(tube)
+    stop = start + region_length
+    if stop > tube_length
+        return _tube_volume_between(tube, start, tube_length) +
+               _tube_volume_between(tube, 0.0, stop - tube_length)
+    end
+    return _tube_volume_between(tube, start, stop)
+end
+
+function _tube_volume_between(tube::VariableTube, start, stop)
+    knots = tube.ξ_geometric_knots
+    interior = knots[(knots .> start) .& (knots .< stop)]
+    positions = [start; interior; stop]
+    area = construct_geometric_interpolations(tube)[3].(positions)
+    # trapezoidal integration is exact for piecewise-linear tube area
+    return sum(diff(positions) .* (area[1:end-1] .+ area[2:end]) ./ 2)
 end
 
 _getM(ρₗ,A,L) = ρₗ*A*L
@@ -367,76 +390,6 @@ Return the capillary numbers for all liquid interfaces
 """
 function getCa(μ,σ,velocity)
     Ca = abs.(μ.*velocity./σ)
-end
-
-
-"""
-    get_area_of_newly_deposited_films(sys) -> Vector{Tuple}
-
-Return the cross-sectional areas of deposited films, associated with each liquid slug's
-interfaces. For an open tube, the first and last slugs are stuck at the ends of the tube,
-so the deposited film areas are set to zero and ignored.
-
-Implementation of (3) from Yuxuan 2024
-"""
-function get_area_of_newly_deposited_films(sys)
-    @unpack μₗ,σ = sys.liquid
-    @unpack ad_fac = sys.vapor
-    dXdt= sys.liquid.dXdt
-    Ac= sys.tube.Ac
-    d = sys.tube.d
-    closedornot = sys.tube.closedornot
-    Afilm_start = sys.vapor.Afilm_start
-    Afilm_end = sys.vapor.Afilm_end
-
-    num_liquid_slugs = length(dXdt)
-
-    # characteristic interface velocities for each liquid slug
-    V = [mean(elem) for elem in dXdt]
-
-    # get a characteristic Capillary number based on the average velocities
-    Vavg = mean(abs.(V))
-    Ca = getCa.(μₗ,σ,Vavg)
-
-    # get liquid film deposition area
-    δdeposit = Catoδ(d,Ca,adjust_factor=ad_fac)
-
-    # Areas of deposited films
-    δdepositArea = sys.tube.peri * δdeposit
-
-    # Areas of existing films
-
-# need to initialize it later on
-    loop_plus_index = circshift(1:num_liquid_slugs,-1)
-    Adeposit = deepcopy(dXdt)
-
-# left and right are relative for liquid. Left = behind, right = ahead
-# if advancing, then use deposited film area. otherwise, existing film area
-
-if closedornot == true
-    for i in eachindex(Adeposit)
-
-        # film behind slug. use "end" film from vapor region i if slug not depositing.
-        Adeposit_left = dXdt[i][1] > 0 ? δdepositArea : Afilm_end[i]
-        # film in front of slug. use "start" film from vapor region i+1 if slug not depositing.
-        Adeposit_right = dXdt[i][end] < 0 ? δdepositArea : Afilm_start[loop_plus_index[i]]
-
-        Adeposit[i]  =   (Adeposit_left, Adeposit_right)
-    end
-else
-    Adeposit[1] =   (0.0,0.0)
-    Adeposit[end] = (0.0,0.0)
-    for i in eachindex(Adeposit[2:end-1])
-        # film behind slug. use "end" film from vapor region i if slug not depositing.
-        Adeposit_left = dXdt[i][1] > 0 ? δdepositArea : Afilm_end[i]
-        # film in front of slug. use "start" film from vapor region i+1 if slug not depositing.
-        Adeposit_right = dXdt[i][end] < 0 ? δdepositArea : Afilm_start[i+1]
-
-        Adeposit[i]  =   (Adeposit_left, Adeposit_right)
-    end
-end
-
-    Adeposit
 end
 
 """
@@ -459,18 +412,10 @@ Given capillary number `Ca` and `d`, return the thickness.
 This is a generalization of the Aussillous and Quere formula.
 It uses an adjustment factor that can be tuned empirically.
 """
-function Catoδ(d,Ca;adjust_factor=1,δmin=2e-6,δmax=1e-4)
-
+function Catoδ(d::Union{AbstractFloat,AbstractVector},Ca;adjust_factor=1,δmin=2e-6,δmax=1e-4)
     δ = 1.34 .* Ca .^ (2/3) ./ (1 .+ 3.35 .* Ca .^ (2/3)) .* d ./ 2 .* adjust_factor
-    if (δ < δmin)
-        return δmin
-    elseif (δ > δmax)
-        return δmax
-    else 
-        return δ
-    end
+    return clamp.(δ, δmin, δmax)
 end
-
 
 """
     RntoΔT(Rn,Tavg,fluid_type,d,TtoP) -> Vector

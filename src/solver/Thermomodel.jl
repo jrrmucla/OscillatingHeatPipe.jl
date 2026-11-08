@@ -156,7 +156,7 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
 
     # Yuxuan 2024, equation (3)
     
-    Adeposit = get_area_of_newly_deposited_films(sys)
+    Adeposit = Af_at_interfaces(sys)
     Adeposit_left = [elem[1] for elem in Adeposit]
     Adeposit_right = [elem[2] for elem in Adeposit]
 

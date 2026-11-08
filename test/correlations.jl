@@ -1,4 +1,6 @@
 using Statistics
+using Test
+using OscillatingHeatPipe
 # using ComputationalHeatTransfer
 
 # test Ca to δ correlation (Aussillous and Quere, 2000)
@@ -17,6 +19,16 @@ using Statistics
 
     δ_clamp_adfac = clamp.(δ .* ad_fac,δmin,δmax)
     @test all(δ_clamp_adfac .≈ Catoδ.([d],Ca,adjust_factor=ad_fac,δmin=δmin,δmax=δmax))
+
+    # A single vector call must clamp each diameter independently.
+    diameters = [1e-8, 1e-3, 1.0]
+    expected = Catoδ.(diameters, 0.01; adjust_factor=1.2)
+    @test Catoδ(diameters, 0.01; adjust_factor=1.2) ≈ expected
+    @test first(expected) == δmin
+    @test δmin < expected[2] < δmax
+    @test last(expected) == δmax
+    @test Catoδ(view(diameters, 1:2), 0.01; adjust_factor=1.2) ≈ expected[1:2]
+    @test isempty(Catoδ(Float64[], 0.01))
 end
 
 # test Churchill friction factor correlation (Churchill, 1977) 

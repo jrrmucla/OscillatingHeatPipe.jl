@@ -154,19 +154,19 @@ end
     @test all(Afilm_end .> 0)
 
     # No slugs are moving. Should only be equal to existing films
-    Adep = get_area_of_newly_deposited_films(sys_tube)
+    Adep = Af_at_interfaces(sys_tube)
     @test all(map((u,v) -> u[1]==v,Adep,δarea_end))
     @test all(map((u,v) -> u[2]==v,Adep,circshift(δarea_start,-1)))
 
     # Left slug interfaces are advancing. Should be equal to deposited film
     dXdt .= [(0.1,0.0) for i in eachindex(dXdt)]
-    Adep = get_area_of_newly_deposited_films(sys_tube)
+    Adep = Af_at_interfaces(sys_tube)
     @test all(map(u -> u[1]≈δarea_dep,Adep))
     @test all(map((u,v) -> u[2]==v,Adep,circshift(δarea_start,-1)))
 
     # Right slug interfaces are advancing. Should be equal to deposited film
     dXdt .= [(0.0,-0.1) for i in eachindex(dXdt)]
-    Adep = get_area_of_newly_deposited_films(sys_tube)
+    Adep = Af_at_interfaces(sys_tube)
     @test all(map((u,v) -> u[1]==v,Adep,δarea_end))
     @test all(map(u -> u[2]≈δarea_dep,Adep))
 

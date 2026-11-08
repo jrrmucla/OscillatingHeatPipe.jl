@@ -51,6 +51,9 @@ function randomXp(tube::UniformTube; kwargs...)
     randomXp(L::Real,d::Real,closedornot::Bool; kwargs...)
 end
 
+randomXp(tube::VariableTube; kwargs...) =
+    randomXp(_tube_length(tube), minimum(tube.Dh_geometric_knots), tube.closedornot; kwargs...)
+
 function randomXp(L::Real,Lmin::Real,closedornot::Bool;numofslugs=DEFAULT_SLUGNUM,
                                                        chargeratio=DEFAULT_LIQUID_CHARGE_RATIO,
                                                        σ_charge=DEFAULT_SIGMA_CHARGE)
@@ -123,6 +126,7 @@ end
                                                     Rn_boil=3e-6,
                                                     inertia_f=1.3,
                                                     d=1e-3,
+                                                    tube=nothing,
                                                     tubeshape="square",
                                                     Nu=3.6,
                                                     slugnum=30,
@@ -133,9 +137,16 @@ end
                                                     nucleatenum=250,
                                                     L_newbubble=6e-3,
                                                     ch_ratio=0.42,
-                                                    σcharge=0.01]) -> UniformPhpSystem
+                                                    σcharge=0.01]) -> UniformPhpSystem or VariableAreaPhpSystem
 
-Constructor for the `UniformPhpSystem` type, to initialize an OHP system.
+Initialize a `UniformPhpSystem`, or a `VariableAreaPhpSystem` when given a
+`VariableTube` through `tube=...`. Without a tube, construct the usual uniform
+tube from `d`, `tubeshape`, `g`, and `closedornot`. A supplied tube owns these
+properties; its point count and length must match the forcing shape. Variable
+geometry knots must align with forcing segment endpoints. Tubes do not store
+Cartesian coordinates, so this verifies arc-coordinate alignment only.
+For variable tubes, the first hydraulic diameter sets the scalar liquid
+heat-transfer coefficient; initial film thickness uses the local diameter.
 Initializes the tube, liquid slugs, vapor regions, wall, and the mappings.
 The inputs are `sys` the embedding substrate of type `ILMSystem` (which is expected to contain the
 OHP geometry as a line source as the last element in the heating models array),
@@ -146,6 +157,7 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
                                                         Rn_boil=DEFAULT_RN_BOIL,
                                                         inertia_f=DEFAULT_INERTIA_F,
                                                         d=DEFAULT_D,
+                                                        tube=nothing,
                                                         tubeshape=DEFAULT_TUBESHAPE,
                                                         Nu=DEFAULT_NU,
                                                         slugnum=DEFAULT_SLUGNUM,
@@ -160,19 +172,27 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
                                                         ch_ratio=DEFAULT_LIQUID_CHARGE_RATIO,
                                                         σcharge=DEFAULT_SIGMA_CHARGE)
 
+    # Validate geometry before constructing fluid-property interpolations.
+    ohp = _get_ohp_from_forcing_list(sys)
+    L = arclength(ohp.shape)
+    N = numpts(ohp.shape)
+    if tube === nothing
+        peri, Ac = peri_Ac(d, tubeshape)
+        tube = UniformTube(d, peri, Ac, L, g, closedornot, N)
+    else
+        _verify_tube_forcing_alignment(tube, ohp.shape)
+        g = tube.g
+        closedornot = tube.closedornot
+        d = tube isa UniformTube ? tube.d : first(tube.Dh_geometric_knots)
+    end
+    L = _tube_length(tube)
+
     # unpack CoolProp Properties
     @unpack fluid_type,Tref,kₗ,ρₗ,Cpₗ,αₗ,μₗ,σ = p_fluid  
 
     # PropConvert
     # an interpolation between different working fluid propeties (currently assuming saturated gas curve)
     propconvert = PropConvert(fluid_type)
-
-    # UniformTube
-    ohp = _get_ohp_from_forcing_list(sys)
-    L = arclength(ohp.shape)            # total length of the pipe when streched to a 1D pipe (an approximate here)
-    N = numpts(ohp.shape)                      # number of ohp points
-    peri,Ac = peri_Ac(d,tubeshape)
-    tube = UniformTube(d,peri,Ac,L,g,closedornot,N);
 
     # Liquid
     Hₗ = p_fluid.kₗ/d * Nu # Nusselt number given
@@ -186,9 +206,8 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
 
     Lvaporplug = XptoLvaporplug(X0,L,tube.closedornot)
     P_initial = zero(Lvaporplug) .+ TtoP(Tref)
-    δfilm = δfilm_relative * d/2
-    Afilm_start_initial = zero(Lvaporplug) .+ peri * δfilm
-    Afilm_end_initial   = zero(Lvaporplug) .+ peri * δfilm
+    Xpvapor = getXpvapor(X0, tube.closedornot)
+    Afilm_start_initial, Afilm_end_initial = _initial_film_areas(tube, Xpvapor, δfilm_relative)
     Lfilm_start_initial = 0.5 .* film_fraction .* Lvaporplug
     Lfilm_end_initial   = deepcopy(Lfilm_start_initial)
     vapors=Vapor(ad_fac=inertia_f,k = p_fluid.kₗ,P=P_initial,Afilm_start=Afilm_start_initial,Afilm_end=Afilm_end_initial,Lfilm_start=Lfilm_start_initial,Lfilm_end=Lfilm_end_initial,Eratio_plus=ηplus,Eratio_minus=ηminus);
@@ -203,7 +222,7 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
 
     # Mapping
     @unpack x,y = ohp.transform(ohp.shape)
-    sys0_nomapping = UniformPhpSystem_nomapping(tube,liquids,vapors,wall,propconvert);
+    sys0_nomapping = PhpSystem_nomapping(tube,liquids,vapors,wall,propconvert);
     
     # Gravitational Potential (as a function of space and time)
     # we require the mapping function's signiture ~ fn(g, x, y)
@@ -220,9 +239,52 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     cache = Cache(boil_hist_int,totalmass)
 
     # UniformPhpSystem
-    sys0 = UniformPhpSystem(tube,liquids,vapors,wall,propconvert,mapping,cache);
+    system_constructor = tube isa VariableTube ? VariableAreaPhpSystem : UniformPhpSystem
+    sys0 = system_constructor(tube,liquids,vapors,wall,propconvert,mapping,cache);
 
     sys0
+end
+
+function _verify_tube_forcing_alignment(tube, shape)
+    tube isa Union{UniformTube,VariableTube} ||
+        throw(ArgumentError("tube must be a UniformTube or VariableTube"))
+    tube.N == numpts(shape) ||
+        throw(ArgumentError("tube point count does not match the OHP forcing shape"))
+    if tube isa VariableTube
+        length(tube.ξ_geometric_knots) >= 2 ||
+            throw(ArgumentError("tube geometry requires at least two knots"))
+    end
+    isapprox(_tube_length(tube), arclength(shape); rtol=1e-8, atol=1e-12) ||
+        throw(ArgumentError("tube length does not match the OHP forcing shape"))
+    tube isa UniformTube && return nothing
+
+    knots = tube.ξ_geometric_knots
+    length(knots) >= 2 && first(knots) == 0 && all(diff(knots) .> 0) ||
+        throw(ArgumentError("tube geometry knots must increase strictly from zero"))
+    for values in (tube.Dh_geometric_knots, tube.Pc_geometric_knots, tube.Ac_geometric_knots)
+        length(values) == length(knots) && all(value -> isfinite(value) && value > 0, values) ||
+            throw(ArgumentError("each geometry knot must have positive finite Dh, Pc, and Ac values"))
+    end
+    forcing_endpoints = [0.0; arccoord(shape)]
+    tolerance = max(1e-12, 1e-8 * arclength(shape))
+    for knot in knots
+        index = searchsortedfirst(forcing_endpoints, knot)
+        candidates = max(1, index - 1):min(length(forcing_endpoints), index)
+        any(abs(forcing_endpoints[i] - knot) <= tolerance for i in candidates) ||
+            throw(ArgumentError("tube geometry knot at $knot does not align with a forcing segment endpoint"))
+    end
+    return nothing
+end
+
+function _initial_film_areas(tube::UniformTube, vapor_interfaces, relative_thickness)
+    film_area = tube.peri * relative_thickness * tube.d / 2
+    return fill(film_area, length(vapor_interfaces)), fill(film_area, length(vapor_interfaces))
+end
+
+function _initial_film_areas(tube::VariableTube, vapor_interfaces, relative_thickness)
+    diameter, perimeter, _ = construct_geometric_interpolations(tube)
+    film_area(position) = perimeter(position) * relative_thickness * diameter(position) / 2
+    return film_area.(first.(vapor_interfaces)), film_area.(last.(vapor_interfaces))
 end
 
 function _get_ohp_from_forcing_list(sys::ILMSystem)

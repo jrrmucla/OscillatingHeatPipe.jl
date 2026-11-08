@@ -72,8 +72,8 @@ function sys_interpolation_openloop(sys)
     Lfilm_end = sys.vapor.Lfilm_end
     Xpvapor = getXpvapor(Xp,sys.tube.closedornot)
 
-    H_film_start = Hfilm.(Afilm_start ./ sys.tube.peri,[sys])
-    H_film_end = Hfilm.(Afilm_end ./ sys.tube.peri,[sys])
+    H_film_start = _film_heat_transfer(sys, Afilm_start, first.(Xpvapor))
+    H_film_end = _film_heat_transfer(sys, Afilm_end, last.(Xpvapor))
     H_vapor = sys.vapor.Hᵥ
     H_liquid = sys.liquid.Hₗ
 
@@ -113,7 +113,7 @@ function sys_interpolation_openloop(sys)
     extend_wall_Xarray = deepcopy(sys.wall.Xarray)
     extend_wall_θarray = deepcopy(sys.wall.θarray)
 
-    extend_wall_Xarray = [0.0;sys.wall.Xarray;sys.tube.L]
+    extend_wall_Xarray = [0.0;sys.wall.Xarray;_tube_length(sys.tube)]
     extend_wall_θarray = [(sys.wall.θarray[1]+sys.wall.θarray[end])/2;sys.wall.θarray;(sys.wall.θarray[1]+sys.wall.θarray[end])/2]
     extend_wall_curvarray = [(sys.wall.curvarray[1]+sys.wall.curvarray[end])/2;sys.wall.curvarray;(sys.wall.curvarray[1]+sys.wall.curvarray[end])/2]
 
@@ -158,8 +158,8 @@ function sys_interpolation_closedloop(sys)
     Lfilm_end = sys.vapor.Lfilm_end
     Xpvapor = getXpvapor(Xp,sys.tube.closedornot)
 
-    H_film_start = Hfilm.(Afilm_start ./ sys.tube.peri,[sys])
-    H_film_end = Hfilm.(Afilm_end ./ sys.tube.peri,[sys])
+    H_film_start = _film_heat_transfer(sys, Afilm_start, first.(Xpvapor))
+    H_film_end = _film_heat_transfer(sys, Afilm_end, last.(Xpvapor))
     H_vapor = sys.vapor.Hᵥ
     H_liquid = sys.liquid.Hₗ
 
@@ -181,7 +181,7 @@ function sys_interpolation_closedloop(sys)
                 append!(θ_inner,[θ[i], θ[i], θ[i], θ[i], θ[i], θ[i], θ[i], θ[i]])
                 append!(H_inner,H_inner_loop_append)
 
-                append!(X_inner_pres,[Xpvapor[i][1], sys.tube.L, 0.0, Xpvapor[i][end]])
+                append!(X_inner_pres,[Xpvapor[i][1], _tube_length(sys.tube), 0.0, Xpvapor[i][end]])
                 append!(P_inner,[P[i], P[i], P[i], P[i]])
             else 
                 append!(X_inner,[Xpvapor[i][1],Xpvapor[i][1]+Lfilm_start[i],
@@ -205,7 +205,7 @@ function sys_interpolation_closedloop(sys)
         θarrays_temp = deepcopy(sys.liquid.θarrays[i])
         
         
-        insert!(Xarrays_temp,period_index, sys.tube.L)
+        insert!(Xarrays_temp,period_index, _tube_length(sys.tube))
         insert!(Xarrays_temp,period_index+1, 0.0)
         insert!(θarrays_temp,period_index, sys.liquid.θarrays[i][period_index])
         insert!(θarrays_temp,period_index+1, sys.liquid.θarrays[i][period_index])
@@ -215,8 +215,8 @@ function sys_interpolation_closedloop(sys)
         append!(H_inner,H_liquid .* ones(length(sys.liquid.Xarrays[i]) + 2))
         
 
-        append!(X_inner_pres,[sys.liquid.Xarrays[i][1], sys.tube.L, 0.0, sys.liquid.Xarrays[i][end]])
-        P_inner_end = (sys.tube.L-sys.liquid.Xarrays[i][1])/mod(sys.liquid.Xarrays[i][end]-sys.liquid.Xarrays[i][1],sys.tube.L) * (P[loop_plus_index[i]]-P[i]) + P[i]
+        append!(X_inner_pres,[sys.liquid.Xarrays[i][1], _tube_length(sys.tube), 0.0, sys.liquid.Xarrays[i][end]])
+        P_inner_end = (_tube_length(sys.tube)-sys.liquid.Xarrays[i][1])/mod(sys.liquid.Xarrays[i][end]-sys.liquid.Xarrays[i][1],_tube_length(sys.tube)) * (P[loop_plus_index[i]]-P[i]) + P[i]
         append!(P_inner,[P[i], P_inner_end, P_inner_end, P[loop_plus_index[i]]])
 
         else
@@ -249,7 +249,7 @@ end
     extend_wall_Xarray = deepcopy(sys.wall.Xarray)
     extend_wall_θarray = deepcopy(sys.wall.θarray)
 
-    extend_wall_Xarray = [0.0;sys.wall.Xarray;sys.tube.L]
+    extend_wall_Xarray = [0.0;sys.wall.Xarray;_tube_length(sys.tube)]
     extend_wall_θarray = [(sys.wall.θarray[1]+sys.wall.θarray[end])/2;sys.wall.θarray;(sys.wall.θarray[1]+sys.wall.θarray[end])/2]
     extend_wall_curvarray = [(sys.wall.curvarray[1]+sys.wall.curvarray[end])/2;sys.wall.curvarray;(sys.wall.curvarray[1]+sys.wall.curvarray[end])/2]
 
@@ -283,7 +283,7 @@ function XHloop_append(i,H_film_start,H_film_end,sys)
 
     H_vapor = sys.vapor.Hᵥ
 
-    L = sys.tube.L
+    L = _tube_length(sys.tube)
 
     if Xpvapor[2] > Xpvapor[1]
         # println("Xp error 1")
@@ -362,7 +362,7 @@ function slug_interp(sys::UniformPhpSystem)
         slug_flags[8i-3:8i-2] = [0.0; 2.0]
         slug_flags[8i-1:8i] =   [2.0; 1.0]
 
-        Xslugs = mod.(Xslugs,sys.tube.L)
+        Xslugs = mod.(Xslugs,_tube_length(sys.tube))
     end
 
     Xmax, imax = findmax(Xslugs)
@@ -372,10 +372,41 @@ function slug_interp(sys::UniformPhpSystem)
 
     xtemp = splice!(Xslugs,1:imax+1,0.0)
     slug_temp = splice!(slug_flags,1:imax+1,edge_status)
-    append!(Xslugs,[xtemp;sys.tube.L])
+    append!(Xslugs,[xtemp;_tube_length(sys.tube)])
     append!(slug_flags,[slug_temp;edge_status])
 
     Interpolations.deduplicate_knots!(Xslugs,move_knots = true)
 
     sluginterp = linear_interpolation(Xslugs, slug_flags);
 end
+
+# overloads to handle the different PHP systems
+
+tube_length(sys::UniformPhpSystem) = _tube_length(sys.tube)
+tube_length(sys::VariableAreaPhpSystem) = _tube_length(sys.tube)
+tube_length(sys::PhpSystem_nomapping) = _tube_length(sys.tube)
+
+_tube_length(tube::UniformTube) = tube.L
+_tube_length(tube::VariableTube) = last(tube.ξ_geometric_knots)
+
+_film_heat_transfer(sys, film_area, positions) =
+    Hfilm.(film_area ./ Pc(sys, positions), Ref(sys.vapor))
+
+Dh(sys::UniformPhpSystem, positions::AbstractVector) = fill(sys.tube.d, length(positions))
+Dh(sys::VariableAreaPhpSystem, positions::AbstractVector) = sys.mapping.Dh_tube_to_liquid.(positions)
+
+Pc(sys::UniformPhpSystem, positions::AbstractVector) = fill(sys.tube.peri, length(positions))
+Pc(sys::VariableAreaPhpSystem, positions::AbstractVector) = sys.mapping.Pc_tube_to_liquid.(positions)
+
+Ac(sys::UniformPhpSystem, positions::AbstractVector) = fill(sys.tube.Ac, length(positions))
+Ac(sys::VariableAreaPhpSystem, positions::AbstractVector) = sys.mapping.Ac_tube_to_liquid.(positions)
+
+# Film heat transfer is also needed before the system's Mapping is constructed.
+Pc(sys::PhpSystem_nomapping, positions::AbstractVector) =
+    _tube_perimeters(sys.tube, positions)
+
+_tube_perimeters(tube::UniformTube, positions::AbstractVector) =
+    fill(tube.peri, length(positions))
+
+_tube_perimeters(tube::VariableTube, positions::AbstractVector) =
+    linear_interpolation(tube.ξ_geometric_knots, tube.Pc_geometric_knots).(positions)

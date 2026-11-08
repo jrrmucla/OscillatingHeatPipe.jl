@@ -1,11 +1,11 @@
 import Plots: mm,palette,text
 
-export OHP,OHPArea,OHPTemp,OHPSlug,OHPPres,OHPSuper,OHP2DΔT,OHPTexp,OHPTcurve,OHPCond,OHPV,OHP1DT,OHP1DP,OHP1DΔT,OHPTwall
+export OHP,OHPDh,OHPTemp,OHPSlug,OHPPres,OHPSuper,OHP2DΔT,OHPTexp,OHPTcurve,OHPCond,OHPV,OHP1DT,OHP1DP,OHP1DΔT,OHPTwall
 
 mutable struct OHP end
 
 mutable struct OHPTemp end
-mutable struct OHPArea end
+mutable struct OHPDh end
 mutable struct OHPSlug end
 mutable struct OHPPres end
 mutable struct OHPSuper end
@@ -80,42 +80,49 @@ end
     ohp
 end
 
-@recipe function f(::OHPArea, x::AbstractVector, y::AbstractVector,
-                   xf::Real, yf::Real, tube::Union{UniformTube,VariableTube})
-    OHPArea(), [x; xf], [y; yf], tube
+"""
+    plot(OHPDh(), x, y, xf, yf, tube; reference_diameter=1e-3, linewidth=3)
+
+Draw the OHP with line width proportional to hydraulic diameter. `linewidth`
+is the width in plot points at `reference_diameter` (in meters, default 1 mm).
+The complete-centerline form `plot(OHPDh(), x, y, tube)` is also supported.
+"""
+@recipe function f(::OHPDh, x::AbstractVector, y::AbstractVector,
+                   xf::Real, yf::Real, tube::Union{UniformTube,VariableTube}; reference_diameter=1e-3)
+    reference_diameter := reference_diameter
+    OHPDh(), [x; xf], [y; yf], tube
 end
 
-@recipe function f(::OHPArea, centerline_x::AbstractVector,
-                   centerline_y::AbstractVector, tube::Union{UniformTube,VariableTube})
+@recipe function f(::OHPDh, centerline_x::AbstractVector,
+                   centerline_y::AbstractVector, tube::Union{UniformTube,VariableTube}; reference_diameter=1e-3)
+    isfinite(reference_diameter) && reference_diameter > 0 ||
+        throw(ArgumentError("reference_diameter must be positive and finite"))
     length(centerline_x) == length(centerline_y) ||
         throw(ArgumentError("centerline x and y coordinates must have equal lengths"))
     length(centerline_x) >= 2 ||
         throw(ArgumentError("the centerline must contain at least two points"))
     distance = [0.0; cumsum(hypot.(diff(centerline_x), diff(centerline_y)))]
     if tube isa VariableTube
-        area_interpolation = construct_geometric_interpolations(tube)[3]
+        diameter_interpolation = construct_geometric_interpolations(tube)[1]
         isapprox(last(distance), last(tube.ξ_geometric_knots)) ||
             throw(ArgumentError("the complete centerline must match the tube geometry length"))
         # Clamp only the final roundoff difference at the interpolation boundary.
         distance[end] = last(tube.ξ_geometric_knots)
-        cross_sectional_area = area_interpolation.(distance)
+        hydraulic_diameter = diameter_interpolation.(distance)
     else
-        cross_sectional_area = fill(tube.Ac, length(distance))
+        hydraulic_diameter = fill(tube.d, length(distance))
     end
 
     seriestype := :path
-    line_z := cross_sectional_area
-    linecolor --> :Blues
-    # Give constant-area tubes a nonzero color range for the colorbar.
-    minimum_area, maximum_area = tube isa VariableTube ?
-        extrema(tube.Ac_geometric_knots) : (tube.Ac, tube.Ac)
-    clims --> (minimum_area == maximum_area ? (0.0, maximum_area) :
-               (minimum_area, maximum_area))
-    linewidth --> 3
+    # Each segment uses its mean diameter, preserving constant straightaway widths.
+    segment_diameter = (hydraulic_diameter[1:end-1] .+ hydraulic_diameter[2:end]) ./ 2
+    reference_linewidth = get(plotattributes, :linewidth, 3)
+    linewidth := reference_linewidth .* segment_diameter ./ reference_diameter
+    line_z := nothing
+    linecolor --> :darkgreen
     aspect_ratio --> :equal
     legend --> false
-    colorbar --> true
-    colorbar_title --> "Cross-sectional area [m²]"
+    colorbar := false
     xlabel --> "x [m]"
     ylabel --> "y [m]"
     grid --> false

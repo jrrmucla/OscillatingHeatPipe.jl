@@ -31,6 +31,7 @@ include("utils/ohp.jl")
 include("utils/Heatercondenser.jl")
 include("utils/Plotrecipe.jl")
 
+include("solver/CommonDynamics.jl")
 include("solver/Thermomodel.jl")
 include("solver/Tools.jl")
 include("solver/Timemarching.jl")
