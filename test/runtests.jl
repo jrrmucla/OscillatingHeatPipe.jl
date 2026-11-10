@@ -5,6 +5,10 @@ using Test
 
 const GROUP = get(ENV, "GROUP", "All")
 
+if GROUP == "All" || GROUP == "ResultsIO"
+    include("resultsio.jl")
+end
+
 ENV["GKSwstype"] = "nul" # removes GKS warnings during plotting
 
 macro mysafetestset(args...)

@@ -3,7 +3,6 @@ using Random
 using Test
 using ProgressMeter
 using Plots
-using JLD2
 
 regression_zero_flux(t, x, base_cache, phys_params, motions) = zeros_surface(base_cache)
 
@@ -87,14 +86,15 @@ function _route_regression_ohp(Δx)
 end
 
 """
-    run_regression_experiment(results_dir; seed=1234)
+    run_regression_experiment(title, results_dir; seed=1234, inspection=false)
 
 Run the coupled ASETS OHP experiment with repeatable initial slug lengths,
 positions, and boiling nucleation sites. Reseed Julia's default RNG immediately
 before OHP initialization. Use the same seed when generating reference results.
-Save the simulation history to `results_dir/regression.jld2` and return its path.
+Save numeric history to `results_dir/title.jld2` and return its path.
+Set `inspection=true` to generate GIFs from the live simulation result.
 """
-function run_regression_experiment(title, results_dir; seed::Integer=1234)
+function run_regression_experiment(title, results_dir; seed::Integer=1234, inspection=false)
     Δx=0.0006
     Δt=4E-4
     tf=5.0
@@ -207,7 +207,8 @@ function run_regression_experiment(title, results_dir; seed::Integer=1234)
     # Store simulation data for subsequent regression comparisons.
     mkpath(results_dir)
     save_path = joinpath(results_dir, "$(title).jld2")
-    save(save_path,"SimulationResult",simulation_result)
+    save_results(save_path, simulation_result; kind=:history)
+    inspection && write_inspection_files(title, simulation_result, results_dir)
 
     return save_path
 end
@@ -274,6 +275,15 @@ function compare_regression_state(actual, expected)
             compare_regression_array(av, bv; atol=atols[j])
         end
     end
+
+    @testset "liquid temperatures" begin
+        for i in eachindex(actual_separators)
+            first_temperature = actual_separators[i] + 1
+            last_temperature = i < length(actual_separators) ? actual_separators[i+1] - 1 : length(actual)
+            compare_regression_array(actual[first_temperature:last_temperature],
+                                     expected[first_temperature:last_temperature]; atol=1e-4, rtol=0)
+        end
+    end
 end
 
 function compare_temperature_values(actual, expected)
@@ -287,7 +297,7 @@ function compare_temperature_values(actual, expected)
             @test length(a) == length(actual.tube_hist_t)
             @test length(b) == length(expected.tube_hist_t)
             @test length(a) == length(b)
-            length(a) == length(b) && continue
+            length(a) == length(b) || continue
             
             for i in eachindex(a)
                 compare_regression_array(a[i], b[i]; atol=1e-4, rtol=0)
@@ -303,7 +313,7 @@ function compare_state_vectors(actual, expected)
         @test length(a) == length(actual.tube_hist_t)
         @test length(b) == length(expected.tube_hist_t)
         @test length(a) == length(b)
-        length(a) == length(b) && return
+        length(a) == length(b) || return
         
         for i in eachindex(a)
             compare_regression_state(a[i], b[i])
@@ -328,13 +338,19 @@ end
     gold_output_file = normpath(joinpath(@__DIR__, "gold","regression.jld2"))
     results_dir = normpath(joinpath(@__DIR__, "results"))
 
-    test_output_file = run_regression_experiment(title, results_dir; seed=1234)
+    # Explicit maintenance mode; normal runs never overwrite the reference.
+    # PowerShell: $env:UPDATE_REGRESSION = "true"
+    update_reference = get(ENV, "UPDATE_REGRESSION", "false") == "true"
+    inspection = get(ENV, "REGRESSION_INSPECTION", "false") == "true"
+    test_output_file = run_regression_experiment(title, results_dir; seed=1234, inspection=inspection)
     print(test_output_file)
 
-    gold_result = load(gold_output_file, "SimulationResult")
-    test_result = load(test_output_file, "SimulationResult")
-
-    write_inspection_files(title, test_result, results_dir)
+    test_result = load_results(test_output_file; kind=:history)
+    if update_reference
+        save_results(gold_output_file, test_result; kind=:history)
+        @info "Regenerated numeric regression reference" gold_output_file
+    end
+    gold_result = load_results(gold_output_file; kind=:history)
 
     compare_regression_results(test_result, gold_result)
 end
