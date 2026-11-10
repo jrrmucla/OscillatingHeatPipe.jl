@@ -7,7 +7,7 @@ export save_results, load_results
 # I'm adding more explicit versioning on file formats to keep track of the changes
 # and migrate the gold standard data for regression testing to match the new formats
 
-const RESULTS_FORMAT_VERSION = 1
+const RESULTS_FORMAT_VERSION = 2
 const RESULTS_HISTORY_FIELDS = (:tube_hist_t, :tube_hist_u, :tube_hist_θwall, :plate_T_hist)
 
 # Convert array wrappers to ordinary arrays and reject executable/object payloads.
@@ -72,7 +72,7 @@ function load_results(path::AbstractString; kind::Symbol=:auto)
         version = file["format_version"]
         version == RESULTS_FORMAT_VERSION || throw(ArgumentError("Unsupported results format version: $version"))
         # Dispatch future supported versions here, before decoding their payloads.
-        _load_results_v1(file, kind)
+        version == 1 && _load_results_v1(file, kind)
     end
 end
 
@@ -80,7 +80,8 @@ end
 # there are two 'kinds' of result within the file:
 # 'history' contains numerical values only -> used for regression testing
 # 'checkpoint' contains numerical values and integrators -> used for postprocessing
-# the contents of the SimulationResult struct are defined in preprocessing.jl
+# Version 1 uses the SimulationResult struct from 205ff6bab4d94a44f9c0c082e9f7e04b0580975d
+# Version 2 uses the SimulationResult struct from 0484a7d65f8b94f9d86cae09ccd94396f858a6ad
 
 function _load_results_v1(file, kind)
     stored_kind = file["kind"]

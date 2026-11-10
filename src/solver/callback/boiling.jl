@@ -86,8 +86,8 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
 
     """let's do constant film thickness for now!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"""
     δdeposit = 2e-5
-    Afilm_start_new = insert!(Afilm_start,index+1,sys.tube.peri * δdeposit)
-    Afilm_end_new = insert!(Afilm_end,index+1,sys.tube.peri * δdeposit)
+    Afilm_start_new = insert!(Afilm_start,index+1,getδarea(sys.tube.Ac, sys.tube.d, δdeposit))
+    Afilm_end_new = insert!(Afilm_end,index+1,getδarea(sys.tube.Ac, sys.tube.d, δdeposit))
 
 
     Nvapor = length(P)

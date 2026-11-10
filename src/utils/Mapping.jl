@@ -390,7 +390,10 @@ _tube_length(tube::UniformTube) = tube.L
 _tube_length(tube::VariableTube) = last(tube.ξ_geometric_knots)
 
 _film_heat_transfer(sys, film_area, positions) =
-    Hfilm.(film_area ./ Pc(sys, positions), Ref(sys.vapor))
+    Hfilm.(_film_thickness(sys, film_area, positions), Ref(sys.vapor))
+
+_film_thickness(sys, film_area, positions) =
+    getδFromδarea.(Ac(sys, positions), Dh(sys, positions), film_area)
 
 Dh(sys::UniformPhpSystem, positions::AbstractVector) = fill(sys.tube.d, length(positions))
 Dh(sys::VariableAreaPhpSystem, positions::AbstractVector) = sys.mapping.Dh_tube_to_liquid.(positions)
@@ -402,6 +405,18 @@ Ac(sys::UniformPhpSystem, positions::AbstractVector) = fill(sys.tube.Ac, length(
 Ac(sys::VariableAreaPhpSystem, positions::AbstractVector) = sys.mapping.Ac_tube_to_liquid.(positions)
 
 # Film heat transfer is also needed before the system's Mapping is constructed.
+Dh(sys::PhpSystem_nomapping, positions::AbstractVector) =
+    _tube_diameters(sys.tube, positions)
+Ac(sys::PhpSystem_nomapping, positions::AbstractVector) =
+    _tube_areas(sys.tube, positions)
+
+_tube_diameters(tube::UniformTube, positions::AbstractVector) = fill(tube.d, length(positions))
+_tube_areas(tube::UniformTube, positions::AbstractVector) = fill(tube.Ac, length(positions))
+_tube_diameters(tube::VariableTube, positions::AbstractVector) =
+    linear_interpolation(tube.ξ_geometric_knots, tube.Dh_geometric_knots).(positions)
+_tube_areas(tube::VariableTube, positions::AbstractVector) =
+    linear_interpolation(tube.ξ_geometric_knots, tube.Ac_geometric_knots).(positions)
+
 Pc(sys::PhpSystem_nomapping, positions::AbstractVector) =
     _tube_perimeters(sys.tube, positions)
 

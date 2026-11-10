@@ -10,7 +10,7 @@ function Af_at_interfaces(sys::Union{UniformPhpSystem, VariableAreaPhpSystem})
 
     δ_deposit = δf_new_at_interfaces(sys)
     ξl = collect(Iterators.flatten(Xp))
-    Af_deposit = δ_deposit .* Pc(sys, ξl) 
+    Af_deposit = getδarea.(Ac(sys, ξl), Dh(sys, ξl), δ_deposit)
     # this is a flattened array of Af for deposition
 
     next_index = circshift(1:length(Xp),-1)

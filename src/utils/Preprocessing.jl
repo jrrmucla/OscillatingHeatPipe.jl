@@ -277,13 +277,13 @@ function _verify_tube_forcing_alignment(tube, shape)
 end
 
 function _initial_film_areas(tube::UniformTube, vapor_interfaces, relative_thickness)
-    film_area = tube.peri * relative_thickness * tube.d / 2
+    film_area = getδarea(tube.Ac, tube.d, relative_thickness * tube.d / 2)
     return fill(film_area, length(vapor_interfaces)), fill(film_area, length(vapor_interfaces))
 end
 
 function _initial_film_areas(tube::VariableTube, vapor_interfaces, relative_thickness)
-    diameter, perimeter, _ = construct_geometric_interpolations(tube)
-    film_area(position) = perimeter(position) * relative_thickness * diameter(position) / 2
+    diameter, _, area = construct_geometric_interpolations(tube)
+    film_area(position) = getδarea(area(position), diameter(position), relative_thickness * diameter(position) / 2)
     return film_area.(first.(vapor_interfaces)), film_area.(last.(vapor_interfaces))
 end
 

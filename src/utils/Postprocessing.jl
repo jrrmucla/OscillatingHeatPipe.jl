@@ -160,8 +160,9 @@ function getδ(sysfinal)
         Afilm_start = sysfinali.vapor.Afilm_start
         Afilm_end = sysfinali.vapor.Afilm_end
 
-        push!(δ_avg_start, mean(Afilm_start) / sysfinali.tube.peri)
-        push!(δ_avg_end, mean(Afilm_end) / sysfinali.tube.peri)
+        interfaces = getXpvapor(sysfinali.liquid.Xp, sysfinali.tube.closedornot)
+        push!(δ_avg_start, mean(_film_thickness(sysfinali, Afilm_start, first.(interfaces))))
+        push!(δ_avg_end, mean(_film_thickness(sysfinali, Afilm_end, last.(interfaces))))
     end
 
     δ_avg_start,δ_avg_end

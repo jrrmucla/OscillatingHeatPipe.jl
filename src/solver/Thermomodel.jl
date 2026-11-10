@@ -370,10 +370,11 @@ function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::Uniform
 
         end
 
-        dMdt_latent_start = dMdt_latent_start.*heaviside.(Afilm_start ./ sys.tube.peri .- δmin)
-        dMdt_latent_end = dMdt_latent_end.*heaviside.(Afilm_end ./ sys.tube.peri .- δmin)
-        dMdt_latent_start_positive = dMdt_latent_start_positive.*heaviside.(Afilm_start ./ sys.tube.peri .- δmin)
-        dMdt_latent_end_positive = dMdt_latent_end_positive.*heaviside.(Afilm_end ./ sys.tube.peri .- δmin)
+        minimum_film_area = getδarea(sys.tube.Ac, sys.tube.d, δmin)
+        dMdt_latent_start = dMdt_latent_start.*heaviside.(Afilm_start .- minimum_film_area)
+        dMdt_latent_end = dMdt_latent_end.*heaviside.(Afilm_end .- minimum_film_area)
+        dMdt_latent_start_positive = dMdt_latent_start_positive.*heaviside.(Afilm_start .- minimum_film_area)
+        dMdt_latent_end_positive = dMdt_latent_end_positive.*heaviside.(Afilm_end .- minimum_film_area)
 
             return dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive
 end

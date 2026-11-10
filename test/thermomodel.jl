@@ -252,7 +252,7 @@ sys_plate = construct_system(prob);
         @test all(isapprox.(uu_test1[5*numofslugs+1:6*numofslugs],0.0,atol=1e-12)) #dAfilm_start/dt = 0
 
         F_end = ρₗ .* Afilm_end
-        F2_end = ρₗ .* (peri .* δdep)
+        F2_end = ρₗ * Ac * (1 - (1 - 2δdep / d)^2)
         C_end = ρₗ
         Lfilm_end = sys_tube.vapor.Lfilm_end
 
@@ -317,8 +317,10 @@ end
     @test all(uu_test2[2*numofslugs+2:2:4*numofslugs]  .== uu_test2[2*numofslugs+1:2:4*numofslugs-1])
 
     # analytical solution for dMdt_latent
-    dMdt_latent_start_analytical = Lfilm_start .* peri .* k ./ (Afilm_start ./ peri) ./ Hfg .* ΔT_array
-    dMdt_latent_end_analytical = Lfilm_end .* peri .* k ./ (Afilm_end ./ peri) ./ Hfg .* ΔT_array
+    δ_start = sys_tube.tube.d / 2 .* (1 .- sqrt.(1 .- Afilm_start ./ Ac))
+    δ_end = sys_tube.tube.d / 2 .* (1 .- sqrt.(1 .- Afilm_end ./ Ac))
+    dMdt_latent_start_analytical = Lfilm_start .* peri .* k ./ δ_start ./ Hfg .* ΔT_array
+    dMdt_latent_end_analytical = Lfilm_end .* peri .* k ./ δ_end ./ Hfg .* ΔT_array
     dMdt_latent_start_positive_analytical = heaviside.(dMdt_latent_start_analytical) .* dMdt_latent_start_analytical
     dMdt_latent_end_positive_analytical = heaviside.(dMdt_latent_end_analytical) .* dMdt_latent_end_analytical
     dMdt_latent_start_negative_analytical = heaviside.(-dMdt_latent_start_analytical) .* dMdt_latent_start_analytical

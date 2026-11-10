@@ -238,17 +238,23 @@ end
     getδarea(Ac,d,δ)
 
 Given cross-sectional tube area `Ac`, diameter `d`, and film thickness `δ`,
-return the cross-sectional area of the film. 
+return `Ac * (1 - (1 - 2δ/d)^2)`. This is the exact annular area for a
+circular channel, with `0 ≤ δ ≤ d/2`. It also describes a uniform wall film
+in a square channel when `d` is its side length; arbitrary cross sections
+require their own geometry relation.
 """
-getδarea(Ac,d,δ) = Ac * (1 - ((d - 2*δ ) / d) ^ 2)
+getδarea(Ac,d,δ) = Ac * (2δ / d) * (2 - 2δ / d)
 
 """
     getδFromδarea(Ac,d,δarea)
 
 Given cross-sectional tube area `Ac`, diameter `d`, and film cross-sectional
-area `δarea`, return the film thickness. 
+area `δarea`, return the film thickness `d/2 * (1 - sqrt(1 - δarea/Ac))`.
+For circular channels this exactly inverts the annular area; `0 ≤ δarea ≤ Ac`.
 """
-getδFromδarea(Ac,d,δarea) = sqrt(δarea/Ac) * d/2
+getδFromδarea(Ac,d,δarea) = (d / 2) * (δarea / Ac) / (1 + sqrt(1 - δarea / Ac))
+# Rationalized inverse of 1 - sqrt(1 - Afilm/Ac), avoiding cancellation
+# for very thin films. Invalid areas above Ac retain a DomainError.
 
 """
     getMtotal(sys::UniformPhpSystem) -> Scalar

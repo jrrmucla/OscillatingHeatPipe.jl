@@ -113,8 +113,9 @@ sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
         sys = initialize_ohpsys(sys_plate,p_fluid,power,closedornot=closed,slugnum=3,
                                δfilm_relative=0.04,tubeshape=shape)
         thickness = 0.04 * sys.tube.d / 2
-        @test all(sys.vapor.Afilm_start .≈ sys.tube.peri * thickness)
-        @test all(sys.vapor.Afilm_end .≈ sys.tube.peri * thickness)
+        expected_area = sys.tube.Ac * (1 - (1 - 2thickness / sys.tube.d)^2)
+        @test all(sys.vapor.Afilm_start .≈ expected_area)
+        @test all(sys.vapor.Afilm_end .≈ expected_area)
         @test !hasproperty(sys.vapor, :δstart)
         @test !hasproperty(sys.vapor, :δend)
 
@@ -149,7 +150,7 @@ end
 
     δarea_start = Afilm_start
     δarea_end = Afilm_end
-    δarea_dep = sys_tube.tube.peri * δdep
+    δarea_dep = sys_tube.tube.Ac * (1 - (1 - 2δdep / d)^2)
     @test all(Afilm_start .> 0)
     @test all(Afilm_end .> 0)
 

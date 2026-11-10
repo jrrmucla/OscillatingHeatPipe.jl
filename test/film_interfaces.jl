@@ -43,8 +43,9 @@ using OscillatingHeatPipe
                 properties, variable_mapping, Cache(Any[], 0.0))
 
             speed = sum(abs((v[1] + v[2]) / 2) for v in velocities) / length(velocities)
-            deposition = perimeter * Catoδ(diameter, getCa(liquid.μₗ, liquid.σ, speed);
-                                           adjust_factor=vapor.ad_fac)
+            thickness = Catoδ(diameter, getCa(liquid.μₗ, liquid.σ, speed);
+                              adjust_factor=vapor.ad_fac)
+            deposition = area * (1 - (1 - 2thickness / diameter)^2)
             expected = fill((0.0, 0.0), length(positions))
             active = closed ? eachindex(expected) : (2:length(expected)-1)
             for i in active

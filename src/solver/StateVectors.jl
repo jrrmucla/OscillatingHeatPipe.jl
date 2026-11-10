@@ -48,7 +48,7 @@ mass `M` of the vapor regions, `Afilm_start` and `Afilm_end` of cross-sectional 
 and `Lfilm_end` of film lengths, to form state vector.
 
 The blocks are `[positions; velocities; masses; Afilm_start; Afilm_end; Lfilm_start; Lfilm_end]`.
-Film areas are in m²; derive thickness as `A / sys.tube.peri`.
+Film areas are in m²; derive thickness with `getδFromδarea(Ac, d, A)`.
 """
 function XMAL_to_u(Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end)
     return ([X_to_u(Xp,dXdt);M;Afilm_start;Afilm_end;Lfilm_start;Lfilm_end])
