@@ -181,7 +181,7 @@ end
         distance[end] = last(tube.ξ_geometric_knots)
         hydraulic_diameter = diameter_interpolation.(distance)
     else
-        hydraulic_diameter = fill(tube.d, length(distance))
+        hydraulic_diameter = fill(tube.Dh, length(distance))
     end
 
     seriestype := :path
@@ -399,7 +399,7 @@ end
 
     ΔT = Twall - Tsat
 
-    ΔTmin = RntoΔT(SimuResult.integrator_tube.p.wall.Rn,Tref,SimuResult.integrator_tube.p.wall.fluid_type,SimuResult.integrator_tube.p.tube.d,TtoP)
+    ΔTmin = RntoΔT(SimuResult.integrator_tube.p.wall.Rn,Tref,SimuResult.integrator_tube.p.wall.fluid_type,SimuResult.integrator_tube.p.tube.Dh,TtoP)
     
     # grid = SimuResult.grid
     grid = SimuResult.integrator_plate.p.base_cache.g
@@ -753,7 +753,7 @@ end
 
     @unpack TtoP = tube_sys.propconvert
 
-    ΔTmin = RntoΔT(SimuResult.integrator_tube.p.wall.Rn,291.2,SimuResult.integrator_tube.p.wall.fluid_type,SimuResult.integrator_tube.p.tube.d,TtoP)
+    ΔTmin = RntoΔT(SimuResult.integrator_tube.p.wall.Rn,291.2,SimuResult.integrator_tube.p.wall.fluid_type,SimuResult.integrator_tube.p.tube.Dh,TtoP)
 
     @series begin
         # label := string.("RTD", i1, "-RTD", i2, " exp")

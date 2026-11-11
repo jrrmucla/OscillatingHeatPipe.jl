@@ -66,21 +66,21 @@ using Statistics
         @test u[2*np + 2*ir] == dXf && u[2*np + 2*ir - 1] == dXi
 
         M = rand(np)
-        Afilm_start = rand(np)
-        Afilm_end = rand(np)
+        Af_L = rand(np)
+        Af_R = rand(np)
         Lfilm_start = rand(np)
         Lfilm_end = rand(np)
         
         # Test that assembly and disassembly are inverses of each other
-        u = OscillatingHeatPipe.XMAL_to_u(X,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end)
+        u = OscillatingHeatPipe.XMAL_to_u(X,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end)
 
-        X2,dXdt2,M2,Afilm_start2,Afilm_end2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.u_to_XMAL(u)
+        X2,dXdt2,M2,Af_L2,Af_R2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.u_to_XMAL(u)
 
         @test X2 == X
         @test dXdt2 == dXdt
         @test M2 == M
-        @test Afilm_start2 == Afilm_start
-        @test Afilm_end2 == Afilm_end
+        @test Af_L2 == Af_L
+        @test Af_R2 == Af_R
         @test Lfilm_start2 == Lfilm_start
         @test Lfilm_end2 == Lfilm_end
 
@@ -89,14 +89,14 @@ using Statistics
         # so that Xp contains (0,Xp1) and (Xpn,L) to describe the end vapor plugs.
         X = [(rand(),rand()) for j in 1:np+1]
         dXdt = [(rand(),rand()) for j in 1:np+1]
-        u = OscillatingHeatPipe.XMAL_to_u(X,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end)
-        X2,dXdt2,M2,Afilm_start2,Afilm_end2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.u_to_XMAL(u)
+        u = OscillatingHeatPipe.XMAL_to_u(X,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end)
+        X2,dXdt2,M2,Af_L2,Af_R2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.u_to_XMAL(u)
 
         @test X2 == X
         @test dXdt2 == dXdt
         @test M2 == M
-        @test Afilm_start2 == Afilm_start
-        @test Afilm_end2 == Afilm_end
+        @test Af_L2 == Af_L
+        @test Af_R2 == Af_R
         @test Lfilm_start2 == Lfilm_start
         @test Lfilm_end2 == Lfilm_end
 
@@ -112,22 +112,22 @@ sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
     for closed in (false, true), shape in ("square", "circle")
         sys = initialize_ohpsys(sys_plate,p_fluid,power,closedornot=closed,slugnum=3,
                                δfilm_relative=0.04,tubeshape=shape)
-        thickness = 0.04 * sys.tube.d / 2
-        expected_area = sys.tube.Ac * (1 - (1 - 2thickness / sys.tube.d)^2)
-        @test all(sys.vapor.Afilm_start .≈ expected_area)
-        @test all(sys.vapor.Afilm_end .≈ expected_area)
+        thickness = 0.04 * sys.tube.Dh / 2
+        expected_area = sys.tube.Ac * (1 - (1 - 2thickness / sys.tube.Dh)^2)
+        @test all(sys.vapor.Af_L .≈ expected_area)
+        @test all(sys.vapor.Af_R .≈ expected_area)
         @test !hasproperty(sys.vapor, :δstart)
         @test !hasproperty(sys.vapor, :δend)
 
         u = newstate(sys)
         mechanical_length = 4length(sys.liquid.Xp) + 5length(sys.vapor.P)
         fields = OscillatingHeatPipe.u_to_XMAL(u[1:mechanical_length])
-        @test fields[4] == sys.vapor.Afilm_start
-        @test fields[5] == sys.vapor.Afilm_end
+        @test fields[4] == sys.vapor.Af_L
+        @test fields[5] == sys.vapor.Af_R
 
         restored = getcurrentsys_nowall!(u,deepcopy(sys))
-        @test restored.vapor.Afilm_start == sys.vapor.Afilm_start
-        @test restored.vapor.Afilm_end == sys.vapor.Afilm_end
+        @test restored.vapor.Af_L == sys.vapor.Af_L
+        @test restored.vapor.Af_R == sys.vapor.Af_R
         @test restored.vapor.P ≈ sys.vapor.P
         @test getMtotal(restored) ≈ getMtotal(sys)
         δ_start, δ_end = getδ([restored])
@@ -138,9 +138,9 @@ end
 
 @testset "Film areas" begin
 
-    d = sys_tube.tube.d
-    Afilm_start = sys_tube.vapor.Afilm_start
-    Afilm_end = sys_tube.vapor.Afilm_end
+    d = sys_tube.tube.Dh
+    Af_L = sys_tube.vapor.Af_L
+    Af_R = sys_tube.vapor.Af_R
     dXdt = sys_tube.liquid.dXdt
     Ac = sys_tube.tube.Ac
 
@@ -148,11 +148,11 @@ end
     Ca = getCa(sys_tube.liquid.μₗ,sys_tube.liquid.σ,0.05)
     δdep = Catoδ(d,Ca,adjust_factor=sys_tube.vapor.ad_fac)
 
-    δarea_start = Afilm_start
-    δarea_end = Afilm_end
+    δarea_start = Af_L
+    δarea_end = Af_R
     δarea_dep = sys_tube.tube.Ac * (1 - (1 - 2δdep / d)^2)
-    @test all(Afilm_start .> 0)
-    @test all(Afilm_end .> 0)
+    @test all(Af_L .> 0)
+    @test all(Af_R .> 0)
 
     # No slugs are moving. Should only be equal to existing films
     Adep = Af_at_interfaces(sys_tube)
@@ -184,13 +184,13 @@ end
 
     numofslugs = length(sys_tube.liquid.Xp)
 
-    sys_tube.vapor.Afilm_start .= sys_tube.tube.peri .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
-    sys_tube.vapor.Afilm_end .= sys_tube.tube.peri .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
+    sys_tube.vapor.Af_L .= sys_tube.tube.Pc .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
+    sys_tube.vapor.Af_R .= sys_tube.tube.Pc .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
     
 
-    d = sys_tube.tube.d
-    Afilm_start = sys_tube.vapor.Afilm_start
-    Afilm_end = sys_tube.vapor.Afilm_end
+    d = sys_tube.tube.Dh
+    Af_L = sys_tube.vapor.Af_L
+    Af_R = sys_tube.vapor.Af_R
     Lfilm_start = sys_tube.vapor.Lfilm_start
     Lfilm_end = sys_tube.vapor.Lfilm_end
     Xp = sys_tube.liquid.Xp
@@ -206,7 +206,7 @@ end
     ρv = sys_tube.propconvert.PtoD.(sys_tube.vapor.P)
 
     # mass of vapor
-    vol_vapor_analytical = Lvaporplug .* Ac .- Lfilm_start .* Afilm_start .- Lfilm_end .* Afilm_end
+    vol_vapor_analytical = Lvaporplug .* Ac .- Lfilm_start .* Af_L .- Lfilm_end .* Af_R
     M_vapor_analytical = ρv .* vol_vapor_analytical
 
     @test OscillatingHeatPipe.getMvapor(sys_tube) ≈ M_vapor_analytical
@@ -218,9 +218,9 @@ end
     @test OscillatingHeatPipe.getMliquid(sys_tube) ≈ M_liquid_analytical
 
     # mass of films
-    vol_film_start_analytical = Lfilm_start .* Afilm_start
+    vol_film_start_analytical = Lfilm_start .* Af_L
     M_film_start_analytical = ρₗ .* vol_film_start_analytical
-    vol_film_end_analytical = Lfilm_end .* Afilm_end
+    vol_film_end_analytical = Lfilm_end .* Af_R
     M_film_end_analytical = ρₗ .* vol_film_end_analytical
 
     Mfilm_start,Mfilm_end = OscillatingHeatPipe.getMfilm(sys_tube)

@@ -6,7 +6,7 @@ export Af_at_interfaces
 """
 function Af_at_interfaces(sys::Union{UniformPhpSystem, VariableAreaPhpSystem})
     @unpack Xp, dXdt = sys.liquid
-    @unpack Afilm_start, Afilm_end = sys.vapor
+    @unpack Af_L, Af_R = sys.vapor
 
     δ_deposit = δf_new_at_interfaces(sys)
     ξl = collect(Iterators.flatten(Xp))
@@ -24,10 +24,10 @@ function Af_at_interfaces(sys::Union{UniformPhpSystem, VariableAreaPhpSystem})
 
     for i in indices
         # Use the left vapor's "end" film if the interface is not depositing.
-        Adeposit_left = dXdt[i][1] > 0 ? Af_deposit[2i-1] : Afilm_end[left_vapor(i)]
+        Adeposit_left = dXdt[i][1] > 0 ? Af_deposit[2i-1] : Af_R[left_vapor(i)]
 
         # Use the right vapor's "start" film if the interface is not depositing.
-        Adeposit_right = dXdt[i][end] < 0 ? Af_deposit[2i] : Afilm_start[right_vapor(i)]
+        Adeposit_right = dXdt[i][end] < 0 ? Af_deposit[2i] : Af_L[right_vapor(i)]
 
         actual_Af_int[i]  =   (Adeposit_left, Adeposit_right)
     end

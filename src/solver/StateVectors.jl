@@ -41,24 +41,24 @@ end
 
 
 """
-    XMAL_to_u(Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end) -> Vector
+    XMAL_to_u(Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end) -> Vector
 
 Assemble vectors `Xp`, `dXdt` of the coordinates and velocities of the slug interfaces, and
-mass `M` of the vapor regions, `Afilm_start` and `Afilm_end` of cross-sectional film areas (m²), and `Lfilm_start`
+mass `M` of the vapor regions, `Af_L` and `Af_R` of cross-sectional film areas (m²), and `Lfilm_start`
 and `Lfilm_end` of film lengths, to form state vector.
 
-The blocks are `[positions; velocities; masses; Afilm_start; Afilm_end; Lfilm_start; Lfilm_end]`.
+The blocks are `[positions; velocities; masses; Af_L; Af_R; Lfilm_start; Lfilm_end]`.
 Film areas are in m²; derive thickness with `getδFromδarea(Ac, d, A)`.
 """
-function XMAL_to_u(Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end)
-    return ([X_to_u(Xp,dXdt);M;Afilm_start;Afilm_end;Lfilm_start;Lfilm_end])
+function XMAL_to_u(Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end)
+    return ([X_to_u(Xp,dXdt);M;Af_L;Af_R;Lfilm_start;Lfilm_end])
 end
 
 """
     u_to_XMAL(u) -> Vector{Tuple}, Vector{Tuple}, Vector, Vector, Vector, Vector, Vector
 
 Disassemble the state vector `u` into vectors `Xp`, `dXdt` of the coordinates and velocities of the slug interfaces, and
-mass `M` of the vapor regions, `Afilm_start` and `Afilm_end` of cross-sectional film areas (m²), and `Lfilm_start`
+mass `M` of the vapor regions, `Af_L` and `Af_R` of cross-sectional film areas (m²), and `Lfilm_start`
 and `Lfilm_end` of film lengths.
 """
 function u_to_XMAL(u::Array{Float64,1})
@@ -85,11 +85,11 @@ function u_to_XMAL(u::Array{Float64,1})
     end
 
     M =             u[4*maxliquidindex+1:           4*maxliquidindex+maxindex]
-    Afilm_start =        u[4*maxliquidindex+maxindex+1:  4*maxliquidindex+2maxindex]
-    Afilm_end =          u[4*maxliquidindex+2maxindex+1: 4*maxliquidindex+3maxindex]
+    Af_L =        u[4*maxliquidindex+maxindex+1:  4*maxliquidindex+2maxindex]
+    Af_R =          u[4*maxliquidindex+2maxindex+1: 4*maxliquidindex+3maxindex]
     Lfilm_start =   u[4*maxliquidindex+3maxindex+1: 4*maxliquidindex+4maxindex]
     Lfilm_end =     u[4*maxliquidindex+4maxindex+1: 4*maxliquidindex+5maxindex]
-    return Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end
+    return Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end
 end
 
 """
@@ -119,12 +119,12 @@ end
 function newstate(sys0::UniformPhpSystem)
     @unpack Ac,d,L,closedornot = sys0.tube
     @unpack Xp,dXdt = sys0.liquid
-    @unpack Afilm_start,Afilm_end,Lfilm_start,Lfilm_end,P = sys0.vapor
+    @unpack Af_L,Af_R,Lfilm_start,Lfilm_end,P = sys0.vapor
     @unpack PtoD = sys0.propconvert
 
     M = systoM(sys0::UniformPhpSystem)
 
-    u=[XMAL_to_u(Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
+    u=[XMAL_to_u(Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
 end
 
 """
@@ -145,7 +145,7 @@ function getcurrentsys_nowall!(u,sys0)
         end
     end
 
-    Xp,dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end = u_to_XMAL(u[1:indexes[1]-1])
+    Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end = u_to_XMAL(u[1:indexes[1]-1])
 
     if sys0.tube.closedornot == true 
         modX!(Xp,sys0.tube.L)
@@ -159,9 +159,9 @@ function getcurrentsys_nowall!(u,sys0)
 
     Ac = sys0.tube.Ac
 
-    d = sys0.tube.d
+    d = sys0.tube.Dh
 
-    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Afilm_start - Lfilm_end .* Afilm_end
+    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Af_L - Lfilm_end .* Af_R
     ρ = M ./ volume_vapor
 
     # println(Lvaporplug)
@@ -179,8 +179,8 @@ function getcurrentsys_nowall!(u,sys0)
     sysnew.liquid.Xarrays = updateXarrays(Xp,sysnew.liquid.θarrays,sysnew.tube.L)
 
     sysnew.vapor.P = P
-    sysnew.vapor.Afilm_start = Afilm_start
-    sysnew.vapor.Afilm_end = Afilm_end
+    sysnew.vapor.Af_L = Af_L
+    sysnew.vapor.Af_R = Af_R
     sysnew.vapor.Lfilm_start = Lfilm_start
     sysnew.vapor.Lfilm_end = Lfilm_end
 

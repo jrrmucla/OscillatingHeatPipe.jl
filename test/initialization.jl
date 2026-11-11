@@ -50,7 +50,7 @@ and fail otherwise.
         variable = initialize_ohpsys(substrate, fluid, 40.0; tube, slugnum=3, nucleatenum=2)
         @test variable isa ohp_module.VariableAreaPhpSystem
         @test variable.tube === tube
-        @test variable.mapping.Ac_tube_to_liquid !== nothing
+        @test variable.tube.map_ξ_to_Ac !== nothing
         @test variable.cache.mass ≈ getMtotal(variable)
         @test all(isfinite, variable.mapping.H_interp_liquidtowall.(variable.wall.Xarray))
         @test ohp_module.refresh_interpolations(variable) isa ohp_module.Mapping

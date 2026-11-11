@@ -18,7 +18,6 @@ using OscillatingHeatPipe
         uniform_tube = UniformTube(diameter, perimeter, area, 1.0, [0.0, 0.0], closed, 10)
         variable_tube = ohp.VariableTube([0.0, 0.5, 1.0], fill(diameter, 3),
             fill(perimeter, 3), fill(area, 3), [0.0, 0.0], closed, 10)
-        geometry = ohp.construct_geometric_interpolations(variable_tube)
 
         # Cover deposition, existing films, zero velocity, and independent interface signs.
         for (motion, velocities) in (
@@ -32,11 +31,11 @@ using OscillatingHeatPipe
                 [zeros(2) for _ in positions])
             # Distinct film areas expose left/right and vapor-index mistakes.
             vapor = Vapor(k=0.1, P=fill(1e5, nvapor),
-                Afilm_start=collect(1:nvapor) .* 1e-9,
-                Afilm_end=collect(1:nvapor) .* 7e-9,
+                Af_L=collect(1:nvapor) .* 1e-9,
+                Af_R=collect(1:nvapor) .* 7e-9,
                 Lfilm_start=fill(0.01, nvapor), Lfilm_end=fill(0.01, nvapor))
-            uniform_mapping = Mapping(ntuple(_ -> placeholder, 6)..., nothing, nothing, nothing)
-            variable_mapping = Mapping(ntuple(_ -> placeholder, 6)..., geometry...)
+            uniform_mapping = Mapping(ntuple(_ -> placeholder, 6)...)
+            variable_mapping = Mapping(ntuple(_ -> placeholder, 6)...)
             uniform = UniformPhpSystem(uniform_tube, liquid, vapor, wall, properties,
                                        uniform_mapping, Cache(Any[], 0.0))
             variable = ohp.VariableAreaPhpSystem(variable_tube, liquid, vapor, wall,
@@ -52,8 +51,8 @@ using OscillatingHeatPipe
                 left_vapor = closed ? i : i - 1
                 right_vapor = closed ? mod1(i + 1, nvapor) : i
                 expected[i] = (
-                    velocities[i][1] > 0 ? deposition : vapor.Afilm_end[left_vapor],
-                    velocities[i][2] < 0 ? deposition : vapor.Afilm_start[right_vapor])
+                    velocities[i][1] > 0 ? deposition : vapor.Af_R[left_vapor],
+                    velocities[i][2] < 0 ? deposition : vapor.Af_L[right_vapor])
             end
             @testset "closed=$closed, motion=$motion" begin
                 for (kind, sys) in (("uniform", uniform), ("variable", variable))

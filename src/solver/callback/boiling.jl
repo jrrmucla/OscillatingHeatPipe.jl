@@ -55,7 +55,7 @@ function boiling_affect!(integrator)
     
     M = getMvapor(p)
 
-    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,p.vapor.Afilm_start,p.vapor.Afilm_end,p.vapor.Lfilm_start,p.vapor.Lfilm_end);liquidθtovec(p.liquid.θarrays)];
+    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,p.vapor.Af_L,p.vapor.Af_R,p.vapor.Lfilm_start,p.vapor.Lfilm_end);liquidθtovec(p.liquid.θarrays)];
 
     resize!(integrator.u,length(unew))
     integrator.u = deepcopy(unew)
@@ -64,11 +64,11 @@ end
 function nucleateboiling(sys,Xvapornew,Pinsert)
     ρₗ = deepcopy(sys.liquid.ρₗ)
     Ac = sys.tube.Ac
-    d = deepcopy(sys.tube.d)
+    d = deepcopy(sys.tube.Dh)
     Xp = deepcopy(sys.liquid.Xp)
     dXdt = deepcopy(sys.liquid.dXdt)
-    Afilm_start = deepcopy(sys.vapor.Afilm_start)
-    Afilm_end = deepcopy(sys.vapor.Afilm_end)
+    Af_L = deepcopy(sys.vapor.Af_L)
+    Af_R = deepcopy(sys.vapor.Af_R)
     
     P = deepcopy(sys.vapor.P)
     L = sys.tube.L
@@ -86,8 +86,8 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
 
     """let's do constant film thickness for now!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"""
     δdeposit = 2e-5
-    Afilm_start_new = insert!(Afilm_start,index+1,getδarea(sys.tube.Ac, sys.tube.d, δdeposit))
-    Afilm_end_new = insert!(Afilm_end,index+1,getδarea(sys.tube.Ac, sys.tube.d, δdeposit))
+    Af_L_new = insert!(Af_L,index+1,getδarea(sys.tube.Ac, sys.tube.Dh, δdeposit))
+    Af_R_new = insert!(Af_R,index+1,getδarea(sys.tube.Ac, sys.tube.Dh, δdeposit))
 
 
     Nvapor = length(P)
@@ -113,8 +113,8 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
     sysnew.liquid.Xp = Xpnew
     sysnew.liquid.dXdt = dXdtnew
     sysnew.vapor.P = Pnew
-    sysnew.vapor.Afilm_start = Afilm_start_new
-    sysnew.vapor.Afilm_end = Afilm_end_new
+    sysnew.vapor.Af_L = Af_L_new
+    sysnew.vapor.Af_R = Af_R_new
     sysnew.vapor.Lfilm_start = Lfilm_start_new
     sysnew.vapor.Lfilm_end = Lfilm_end_new
 
@@ -163,7 +163,7 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
             maxvalue_type = Lfilm_maxvalueindex[2] # find the section with largest length for future shrinking, 1: Lfilm_start, 2: Lfilm_end, 3: Lpurevapor
 
             if maxvalue_type == 1
-                Afilm = Afilm_start_new[maxindex]
+                Afilm = Af_L_new[maxindex]
                 factor_adjust = Ac/(Ac-Afilm)
 
                 if maxvalue > -L_adjust*factor_adjust
@@ -181,7 +181,7 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
                 end
 
             elseif maxvalue_type == 2
-                Afilm = Afilm_end_new[maxindex]
+                Afilm = Af_R_new[maxindex]
                 factor_adjust = Ac/(Ac-Afilm)
 
                 if maxvalue > -L_adjust*factor_adjust
@@ -405,19 +405,19 @@ end
 
 function get_vapor_energy(sys0::UniformPhpSystem)
     Ac = sys0.tube.Ac
-    d = sys0.tube.d
+    d = sys0.tube.Dh
 
     X0 = sys0.liquid.Xp
     dXdt0 = sys0.liquid.dXdt
 
-    Afilm_start = sys0.vapor.Afilm_start
-    Afilm_end = sys0.vapor.Afilm_end
+    Af_L = sys0.vapor.Af_L
+    Af_R = sys0.vapor.Af_R
     Lfilm_start = sys0.vapor.Lfilm_start
     Lfilm_end = sys0.vapor.Lfilm_end
     P = sys0.vapor.P
     Lvaporplug = XptoLvaporplug(X0,sys0.tube.L,sys0.tube.closedornot)
 
-    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Afilm_start - Lfilm_end .* Afilm_end
+    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Af_L - Lfilm_end .* Af_R
 
     PtoD = sys0.propconvert.PtoD
     PtoT = sys0.propconvert.PtoT

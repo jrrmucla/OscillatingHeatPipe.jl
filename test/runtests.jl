@@ -49,6 +49,8 @@ function use_stable_literate_sandbox!()
 end
 
 if GROUP == "All" || GROUP == "Auxiliary"
+    include("tube_geometry.jl")
+    include("inner_coordinates.jl")
     include("film_geometry.jl")
     include("film_interfaces.jl")
     include("initialization.jl")

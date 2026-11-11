@@ -320,20 +320,20 @@ function getVolumevapor(sys)
     @unpack tube, vapor, liquid = sys
     L = _tube_length(tube)
     closedornot = tube.closedornot
-    @unpack Afilm_start, Afilm_end, Lfilm_start, Lfilm_end = vapor
+    @unpack Af_L, Af_R, Lfilm_start, Lfilm_end = vapor
     @unpack Xp = liquid
     
     Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
     
     interfaces = getXpvapor(Xp, closedornot)
     tube_volumes = _tube_region_volume.(Ref(tube), first.(interfaces), Lvaporplug)
-    return tube_volumes .- Afilm_start .* Lfilm_start .- Afilm_end .* Lfilm_end
+    return tube_volumes .- Af_L .* Lfilm_start .- Af_R .* Lfilm_end
 
 end
 
 
-_getVolumevapor(Ac,Afilm_start,Afilm_end,Lvaporplug,Lfilm_start,Lfilm_end) = 
-                        Ac * Lvaporplug - Afilm_start * Lfilm_start - Afilm_end * Lfilm_end
+_getVolumevapor(Ac,Af_L,Af_R,Lvaporplug,Lfilm_start,Lfilm_end) = 
+                        Ac * Lvaporplug - Af_L * Lfilm_start - Af_R * Lfilm_end
 
 
 
@@ -344,10 +344,10 @@ Return the masses of all of the liquid films in the system.
 """
 function getMfilm(sys)
     @unpack tube, vapor, liquid = sys
-    @unpack Afilm_start, Afilm_end, Lfilm_start, Lfilm_end = vapor
+    @unpack Af_L, Af_R, Lfilm_start, Lfilm_end = vapor
     @unpack ρₗ = liquid
 
-    return _getM.(ρₗ,Afilm_start,Lfilm_start), _getM.(ρₗ,Afilm_end,Lfilm_end)
+    return _getM.(ρₗ,Af_L,Lfilm_start), _getM.(ρₗ,Af_R,Lfilm_end)
 end
 
 """
@@ -450,12 +450,12 @@ function systoM(sys0::UniformPhpSystem)
 
     @unpack Ac,d,L,closedornot = sys0.tube
     @unpack Xp = sys0.liquid
-    @unpack Afilm_start,Afilm_end,Lfilm_start,Lfilm_end,P = sys0.vapor
+    @unpack Af_L,Af_R,Lfilm_start,Lfilm_end,P = sys0.vapor
     @unpack PtoD = sys0.propconvert
 
     Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
 
-    volume_vapor = Lvaporplug .* Ac .- Lfilm_start .* Afilm_start .- Lfilm_end .* Afilm_end
+    volume_vapor = Lvaporplug .* Ac .- Lfilm_start .* Af_L .- Lfilm_end .* Af_R
 
     M = PtoD.(P) .* volume_vapor
 end

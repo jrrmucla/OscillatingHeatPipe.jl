@@ -3,16 +3,14 @@ export initialize_interpolations, refresh_interpolations, slug_interp
 """
     initialize_interpolations(sys::AbstractPHP, map_ξ_to_heightg::AbstractInterpolation)
 
-Returns a Mapping for sys. Creates interpolations for wall, fluid, geometry (Dh, Pc, Ac). Uniform tubes
-use `nothing` for the geometry interpolants. Just stores the gravitational
-potential interpolant.
+Returns a Mapping for sys. Creates wall and fluid interpolations and stores
+the gravitational potential interpolant. Geometry lookups live in the tube.
 
 After initialization, use `refresh_interpolations(sys)` to reuse the
 fixed tube geometry instead of constructing it again.
 """
 function initialize_interpolations(sys::AbstractPHP, map_ξ_to_heightg::AbstractInterpolation)
-    geometry = construct_geometric_interpolations(sys.tube)
-    return assemble_interpolations(sys, map_ξ_to_heightg, geometry)
+    return assemble_interpolations(sys, map_ξ_to_heightg)
 end
 
 """
@@ -23,27 +21,15 @@ Does not rebuild geometric interps or the gravity-potential interp.
 """
 function refresh_interpolations(sys::AbstractPHP)
     mapping = sys.mapping
-    geometry = (mapping.Dh_tube_to_liquid, mapping.Pc_tube_to_liquid,
-                mapping.Ac_tube_to_liquid)
-    return assemble_interpolations(sys, mapping.heightg_interp, geometry)
+    return assemble_interpolations(sys, mapping.heightg_interp)
 end
 
-function assemble_interpolations(sys::AbstractPHP, map_ξ_to_heightg::AbstractInterpolation,
-                                  geometry::Tuple)
+function assemble_interpolations(sys::AbstractPHP, map_ξ_to_heightg::AbstractInterpolation)
     map_ξ_to_θw, map_ξ_to_wall_curvature, map_ξ_to_θf, map_ξ_to_Hf, map_ξ_to_Pf =
         sys_interpolation(sys)
     return Mapping(map_ξ_to_θw, map_ξ_to_wall_curvature,
                    map_ξ_to_θf, map_ξ_to_Hf, map_ξ_to_Pf,
-                   map_ξ_to_heightg, geometry...)
-end
-
-construct_geometric_interpolations(::UniformTube) = (nothing, nothing, nothing)
-
-function construct_geometric_interpolations(tube::VariableTube)
-    map_ξ_to_Dh = linear_interpolation(tube.ξ_geometric_knots, tube.Dh_geometric_knots)
-    map_ξ_to_Pc = linear_interpolation(tube.ξ_geometric_knots, tube.Pc_geometric_knots)
-    map_ξ_to_Ac = linear_interpolation(tube.ξ_geometric_knots, tube.Ac_geometric_knots)
-    return map_ξ_to_Dh, map_ξ_to_Pc, map_ξ_to_Ac
+                   map_ξ_to_heightg)
 end
 
 function sys_interpolation(sys)
@@ -66,14 +52,14 @@ function sys_interpolation_openloop(sys)
     @unpack PtoT = sys.propconvert
     θ = PtoT.(sys.vapor.P)
     P = sys.vapor.P
-    Afilm_start = sys.vapor.Afilm_start
-    Afilm_end = sys.vapor.Afilm_end
+    Af_L = sys.vapor.Af_L
+    Af_R = sys.vapor.Af_R
     Lfilm_start = sys.vapor.Lfilm_start
     Lfilm_end = sys.vapor.Lfilm_end
     Xpvapor = getXpvapor(Xp,sys.tube.closedornot)
 
-    H_film_start = _film_heat_transfer(sys, Afilm_start, first.(Xpvapor))
-    H_film_end = _film_heat_transfer(sys, Afilm_end, last.(Xpvapor))
+    H_film_start = _film_heat_transfer(sys, Af_L, first.(Xpvapor))
+    H_film_end = _film_heat_transfer(sys, Af_R, last.(Xpvapor))
     H_vapor = sys.vapor.Hᵥ
     H_liquid = sys.liquid.Hₗ
 
@@ -152,14 +138,14 @@ function sys_interpolation_closedloop(sys)
     @unpack PtoT = sys.propconvert
     θ = PtoT.(sys.vapor.P)
     P = sys.vapor.P
-    Afilm_start = sys.vapor.Afilm_start
-    Afilm_end = sys.vapor.Afilm_end
+    Af_L = sys.vapor.Af_L
+    Af_R = sys.vapor.Af_R
     Lfilm_start = sys.vapor.Lfilm_start
     Lfilm_end = sys.vapor.Lfilm_end
     Xpvapor = getXpvapor(Xp,sys.tube.closedornot)
 
-    H_film_start = _film_heat_transfer(sys, Afilm_start, first.(Xpvapor))
-    H_film_end = _film_heat_transfer(sys, Afilm_end, last.(Xpvapor))
+    H_film_start = _film_heat_transfer(sys, Af_L, first.(Xpvapor))
+    H_film_end = _film_heat_transfer(sys, Af_R, last.(Xpvapor))
     H_vapor = sys.vapor.Hᵥ
     H_liquid = sys.liquid.Hₗ
 
@@ -223,8 +209,7 @@ function sys_interpolation_closedloop(sys)
             append!(X_inner,sys.liquid.Xarrays[i])
             append!(θ_inner,sys.liquid.θarrays[i])
             append!(H_inner,H_liquid .* ones(length(sys.liquid.Xarrays[i])))
-
-    end
+        end
 end
 
         imin = argmin(X_inner)
@@ -386,42 +371,12 @@ tube_length(sys::UniformPhpSystem) = _tube_length(sys.tube)
 tube_length(sys::VariableAreaPhpSystem) = _tube_length(sys.tube)
 tube_length(sys::PhpSystem_nomapping) = _tube_length(sys.tube)
 
-_tube_length(tube::UniformTube) = tube.L
-_tube_length(tube::VariableTube) = last(tube.ξ_geometric_knots)
-
 _film_heat_transfer(sys, film_area, positions) =
     Hfilm.(_film_thickness(sys, film_area, positions), Ref(sys.vapor))
 
 _film_thickness(sys, film_area, positions) =
     getδFromδarea.(Ac(sys, positions), Dh(sys, positions), film_area)
 
-Dh(sys::UniformPhpSystem, positions::AbstractVector) = fill(sys.tube.d, length(positions))
-Dh(sys::VariableAreaPhpSystem, positions::AbstractVector) = sys.mapping.Dh_tube_to_liquid.(positions)
-
-Pc(sys::UniformPhpSystem, positions::AbstractVector) = fill(sys.tube.peri, length(positions))
-Pc(sys::VariableAreaPhpSystem, positions::AbstractVector) = sys.mapping.Pc_tube_to_liquid.(positions)
-
-Ac(sys::UniformPhpSystem, positions::AbstractVector) = fill(sys.tube.Ac, length(positions))
-Ac(sys::VariableAreaPhpSystem, positions::AbstractVector) = sys.mapping.Ac_tube_to_liquid.(positions)
-
-# Film heat transfer is also needed before the system's Mapping is constructed.
-Dh(sys::PhpSystem_nomapping, positions::AbstractVector) =
-    _tube_diameters(sys.tube, positions)
-Ac(sys::PhpSystem_nomapping, positions::AbstractVector) =
-    _tube_areas(sys.tube, positions)
-
-_tube_diameters(tube::UniformTube, positions::AbstractVector) = fill(tube.d, length(positions))
-_tube_areas(tube::UniformTube, positions::AbstractVector) = fill(tube.Ac, length(positions))
-_tube_diameters(tube::VariableTube, positions::AbstractVector) =
-    linear_interpolation(tube.ξ_geometric_knots, tube.Dh_geometric_knots).(positions)
-_tube_areas(tube::VariableTube, positions::AbstractVector) =
-    linear_interpolation(tube.ξ_geometric_knots, tube.Ac_geometric_knots).(positions)
-
-Pc(sys::PhpSystem_nomapping, positions::AbstractVector) =
-    _tube_perimeters(sys.tube, positions)
-
-_tube_perimeters(tube::UniformTube, positions::AbstractVector) =
-    fill(tube.peri, length(positions))
-
-_tube_perimeters(tube::VariableTube, positions::AbstractVector) =
-    linear_interpolation(tube.ξ_geometric_knots, tube.Pc_geometric_knots).(positions)
+Dh(sys::AbstractPHP, positions) = Dh(sys.tube, positions)
+Pc(sys::AbstractPHP, positions) = Pc(sys.tube, positions)
+Ac(sys::AbstractPHP, positions) = Ac(sys.tube, positions)

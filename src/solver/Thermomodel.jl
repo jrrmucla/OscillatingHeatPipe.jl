@@ -3,7 +3,7 @@ export dMdtdynamicsmodel,dynamicsmodel_steadyfilm,wallmodel,liquidmodel,dynamics
 function _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
     Ac, Lliquidslug, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
     Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
-    Afilm_start, Afilm_end, rhs_dXdt, rhs_g, heightg, rhs_press, P)
+    Af_L, Af_R, rhs_dXdt, rhs_g, heightg, rhs_press, P)
 
     #. initialize vapor velocities for left (smaller ξ) and right (larger ξ) side
     numofvaporbubble = numofliquidslug - 1
@@ -36,7 +36,7 @@ function _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposi
 
     dLdt_start,dLdt_end,dAdt_start,dAdt_end,v_vapor_start_final,v_vapor_end_final = film_dynamics(ρₗ, Ac,dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_start_negative,Eratio_plus,Eratio_minus,
     v_vapor_left_normal,dMdt_latent_end_positive,dMdt_latent_end_negative,v_vapor_right_normal,Adeposit_vapor_start,Adeposit_vapor_end,
-    Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Afilm_start,Afilm_end)
+    Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Af_L,Af_R)
 
     v_liquid_left_final = [0.0;vcat(v_vapor_end_final...)]
     v_liquid_right_final = [vcat(v_vapor_start_final...);0.0]
@@ -70,7 +70,7 @@ end
 function _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
     Ac, Lliquidslug, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
     Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
-    Afilm_start, Afilm_end, rhs_dXdt, rhs_g, heightg, rhs_press, P)
+    Af_L, Af_R, rhs_dXdt, rhs_g, heightg, rhs_press, P)
 
     #. initialize vapor velocities for left (smaller ξ) and right (larger ξ) side
     numofvaporbubble = numofliquidslug
@@ -107,7 +107,7 @@ function _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adepo
 
     dLdt_start,dLdt_end,dAdt_start,dAdt_end,v_vapor_start_final,v_vapor_end_final = film_dynamics(ρₗ, Ac,dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_start_negative,Eratio_plus,Eratio_minus,
     v_vapor_left_normal,dMdt_latent_end_positive,dMdt_latent_end_negative,v_vapor_right_normal,Adeposit_vapor_start,Adeposit_vapor_end,
-    Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Afilm_start,Afilm_end)
+    Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Af_L,Af_R)
 
     v_liquid_left_final = v_vapor_end_final
     v_liquid_right_final = [@view v_vapor_start_final[2:end];v_vapor_start_final[1]]
@@ -148,7 +148,7 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
     sys :: UniformPhpSystem = php_sys
     @unpack d,peri,Ac,g,L,closedornot = sys.tube
     @unpack σ,μₗ,ρₗ,Xp,dXdt = sys.liquid
-    @unpack P,Eratio_plus,Eratio_minus,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end,ad_fac = sys.vapor
+    @unpack P,Eratio_plus,Eratio_minus,Af_L,Af_R,Lfilm_start,Lfilm_end,ad_fac = sys.vapor
     @unpack L_newbubble = sys.wall
 
     # number of liquid slugs
@@ -191,28 +191,28 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
         return _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
             Ac, Lliquidslug, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
             Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
-            Afilm_start, Afilm_end, rhs_dXdt, rhs_g, heightg, rhs_press, P)
+            Af_L, Af_R, rhs_dXdt, rhs_g, heightg, rhs_press, P)
     end
 
     if closedornot == true
         return _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
             Ac, Lliquidslug, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
             Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
-            Afilm_start, Afilm_end, rhs_dXdt, rhs_g, heightg, rhs_press, P)
+            Af_L, Af_R, rhs_dXdt, rhs_g, heightg, rhs_press, P)
     end
 end
 
 function film_dynamics(ρₗ, Ac,dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_start_negative,Eratio_plus,Eratio_minus,
     v_vapor_left_normal,dMdt_latent_end_positive,dMdt_latent_end_negative,v_vapor_right_normal,Adeposit_vapor_start,Adeposit_vapor_end,
-    Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Afilm_start,Afilm_end)
+    Lvaporplug,Lfilm_start,Lfilm_end,L0threshold_film,L0threshold_pure_vapor,v_momentum_vapor_start,v_momentum_vapor_end,Af_L,Af_R)
 
     # F is the cross-sectional area of the film multiplied by liquid density
     # With area as the state, d(ρ*A*L)/dA = ρ*L.
 
-    F_start = ρₗ .* Afilm_start
+    F_start = ρₗ .* Af_L
     C_start = ρₗ
 
-    F_end = ρₗ .* Afilm_end
+    F_end = ρₗ .* Af_R
     C_end = ρₗ
 
     # the dLdt under normal condition, without considering five different cases
@@ -232,8 +232,8 @@ function film_dynamics(ρₗ, Ac,dMdt_latent_start,dMdt_latent_end,dMdt_latent_s
     v_vapor_right_case2 = v_momentum_vapor_end   .- ((-dMdt_latent_end)   ./ (ρₗ .* Ac))
 
     # for case 5, the liquid interface is essentially eating the other side's liquid film, so need to account for the mass flow rate contributed by that liquid film
-    v_vapor_left_case5  = Ac ./ (Ac .- Afilm_end)   .* v_vapor_left_case2
-    v_vapor_right_case5 = Ac ./ (Ac .- Afilm_start) .* v_vapor_right_case2
+    v_vapor_left_case5  = Ac ./ (Ac .- Af_R)   .* v_vapor_left_case2
+    v_vapor_right_case5 = Ac ./ (Ac .- Af_L) .* v_vapor_right_case2
 
     V_vapor_matrix_start = hcat(v_vapor_left_normal,v_vapor_left_case2,v_vapor_left_normal,v_vapor_left_normal,v_vapor_left_case5)'
     V_vapor_matrix_end   = hcat(v_vapor_right_normal,v_vapor_right_case2,v_vapor_right_normal,v_vapor_right_normal,v_vapor_right_case5)'
@@ -250,8 +250,8 @@ function film_dynamics(ρₗ, Ac,dMdt_latent_start,dMdt_latent_end,dMdt_latent_s
     dAdt_start_normal = (-dMdt_latent_start .- F_start .* dLdt_start' .- ρₗ .* Adeposit_vapor_start  .* v_vapor_left_normal) ./ (C_start .* Lfilm_start)
     dAdt_end_normal = (-dMdt_latent_end     .- F_end   .* dLdt_end'   .+ ρₗ .* Adeposit_vapor_end .* v_vapor_right_normal) ./ (C_end .* Lfilm_end)
 
-    dAdt_start_case4 = (-dMdt_latent_start .- F_start .* dLdt_start' .- ρₗ .* Adeposit_vapor_start  .* v_vapor_left_normal .+ ρₗ .* Afilm_start  .* v_vapor_right_case5) ./ (C_start .* Lfilm_start)
-    dAdt_end_case4 = (-dMdt_latent_end     .- F_end   .* dLdt_end'   .+ ρₗ .* Adeposit_vapor_end .* v_vapor_right_normal .- ρₗ .* Afilm_end  .* v_vapor_left_case5) ./ (C_end .* Lfilm_end)
+    dAdt_start_case4 = (-dMdt_latent_start .- F_start .* dLdt_start' .- ρₗ .* Adeposit_vapor_start  .* v_vapor_left_normal .+ ρₗ .* Af_L  .* v_vapor_right_case5) ./ (C_start .* Lfilm_start)
+    dAdt_end_case4 = (-dMdt_latent_end     .- F_end   .* dLdt_end'   .+ ρₗ .* Adeposit_vapor_end .* v_vapor_right_normal .- ρₗ .* Af_R  .* v_vapor_left_case5) ./ (C_end .* Lfilm_end)
 
     dAdt_matrix_start = hcat(dAdt_start_normal,0 .* dAdt_start_normal,dAdt_start_normal,dAdt_start_case4,0 .* dAdt_start_normal)'
     dAdt_matrix_end   = hcat(dAdt_end_normal,0 .* dAdt_end_normal,dAdt_end_normal,dAdt_end_case4,0 .* dLdt_end_normal)'
@@ -313,15 +313,15 @@ function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::Uniform
 
     L = sys.tube.L
 
-    peri = sys.tube.peri
+    peri = sys.tube.Pc
     Ac = sys.tube.Ac
     k = sys.vapor.k
 
     Lfilm_start = sys.vapor.Lfilm_start
     Lfilm_end = sys.vapor.Lfilm_end
 
-    Afilm_start = sys.vapor.Afilm_start
-    Afilm_end = sys.vapor.Afilm_end
+    Af_L = sys.vapor.Af_L
+    Af_R = sys.vapor.Af_R
     δmin = sys.vapor.δmin
 
     P = sys.vapor.P
@@ -370,11 +370,11 @@ function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::Uniform
 
         end
 
-        minimum_film_area = getδarea(sys.tube.Ac, sys.tube.d, δmin)
-        dMdt_latent_start = dMdt_latent_start.*heaviside.(Afilm_start .- minimum_film_area)
-        dMdt_latent_end = dMdt_latent_end.*heaviside.(Afilm_end .- minimum_film_area)
-        dMdt_latent_start_positive = dMdt_latent_start_positive.*heaviside.(Afilm_start .- minimum_film_area)
-        dMdt_latent_end_positive = dMdt_latent_end_positive.*heaviside.(Afilm_end .- minimum_film_area)
+        minimum_film_area = getδarea(sys.tube.Ac, sys.tube.Dh, δmin)
+        dMdt_latent_start = dMdt_latent_start.*heaviside.(Af_L .- minimum_film_area)
+        dMdt_latent_end = dMdt_latent_end.*heaviside.(Af_R .- minimum_film_area)
+        dMdt_latent_start_positive = dMdt_latent_start_positive.*heaviside.(Af_L .- minimum_film_area)
+        dMdt_latent_end_positive = dMdt_latent_end_positive.*heaviside.(Af_R .- minimum_film_area)
 
             return dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive
 end

@@ -120,7 +120,7 @@ end
     tstep = OscillatingHeatPipe.DEFAULT_BOIL_SCAN_INTERVAL
     
     Rn = sys_tube.wall.Rn
-    d = sys_tube.tube.d
+    d = sys_tube.tube.Dh
     TtoP = sys_tube.propconvert.TtoP
     PtoT = sys_tube.propconvert.PtoT
 

@@ -14,7 +14,7 @@ function onesideXp(ohp,tube::UniformTube,line)
     sign = line[4]
 
     L = tube.L
-    Lmin = tube.d
+    Lmin = tube.Dh
     
     body = ohp.body
     
@@ -183,7 +183,7 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
         _verify_tube_forcing_alignment(tube, ohp.shape)
         g = tube.g
         closedornot = tube.closedornot
-        d = tube isa UniformTube ? tube.d : first(tube.Dh_geometric_knots)
+        d = tube isa UniformTube ? tube.Dh : first(tube.Dh_geometric_knots)
     end
     L = _tube_length(tube)
 
@@ -207,10 +207,10 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     Lvaporplug = XptoLvaporplug(X0,L,tube.closedornot)
     P_initial = zero(Lvaporplug) .+ TtoP(Tref)
     Xpvapor = getXpvapor(X0, tube.closedornot)
-    Afilm_start_initial, Afilm_end_initial = _initial_film_areas(tube, Xpvapor, δfilm_relative)
+    Af_L_initial, Af_R_initial = _initial_film_areas(tube, Xpvapor, δfilm_relative)
     Lfilm_start_initial = 0.5 .* film_fraction .* Lvaporplug
     Lfilm_end_initial   = deepcopy(Lfilm_start_initial)
-    vapors=Vapor(ad_fac=inertia_f,k = p_fluid.kₗ,P=P_initial,Afilm_start=Afilm_start_initial,Afilm_end=Afilm_end_initial,Lfilm_start=Lfilm_start_initial,Lfilm_end=Lfilm_end_initial,Eratio_plus=ηplus,Eratio_minus=ηminus);
+    vapors=Vapor(ad_fac=inertia_f,k = p_fluid.kₗ,P=P_initial,Af_L=Af_L_initial,Af_R=Af_R_initial,Lfilm_start=Lfilm_start_initial,Lfilm_end=Lfilm_end_initial,Eratio_plus=ηplus,Eratio_minus=ηminus);
 
     # Wall
     Xstations = sort(rand(nucleatenum) .* L);
@@ -277,7 +277,7 @@ function _verify_tube_forcing_alignment(tube, shape)
 end
 
 function _initial_film_areas(tube::UniformTube, vapor_interfaces, relative_thickness)
-    film_area = getδarea(tube.Ac, tube.d, relative_thickness * tube.d / 2)
+    film_area = getδarea(tube.Ac, tube.Dh, relative_thickness * tube.Dh / 2)
     return fill(film_area, length(vapor_interfaces)), fill(film_area, length(vapor_interfaces))
 end
 

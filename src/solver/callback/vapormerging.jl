@@ -18,17 +18,17 @@ function vaporMergingAffect!(integrator)
     # M = nondi_PtoD.(p.vapor.P) .* Lvaporplug
 
     Ac = p.tube.Ac
-    d = p.tube.d
-    Afilm_start = p.vapor.Afilm_start
-    Afilm_end = p.vapor.Afilm_end
+    d = p.tube.Dh
+    Af_L = p.vapor.Af_L
+    Af_R = p.vapor.Af_R
     Lfilm_start = p.vapor.Lfilm_start
     Lfilm_end = p.vapor.Lfilm_end
 
-    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Afilm_start - Lfilm_end .* Afilm_end
+    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Af_L - Lfilm_end .* Af_R
     @unpack PtoD = p.propconvert
     M = PtoD.(p.vapor.P) .* volume_vapor
 
-    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
+    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
 
     resize!(integrator.u,size(unew,1)::Int)
     integrator.u = deepcopy(unew)
@@ -78,21 +78,21 @@ function vaporMerging(p,i)
 
 
     if i != length(p.liquid.Xp)
-        splice!(systemp.vapor.Afilm_start,right_index[i])
-        splice!(systemp.vapor.Afilm_end,i)
+        splice!(systemp.vapor.Af_L,right_index[i])
+        splice!(systemp.vapor.Af_R,i)
         splice!(systemp.vapor.Lfilm_start,right_index[i])
         splice!(systemp.vapor.Lfilm_end,i)    
         splice!(systemp.vapor.P,i:i+1,[(systemp.vapor.P[i]+systemp.vapor.P[right_index[i]])/2])
 
         else
-            # splice!(systemp.vapor.Afilm_start,right_index[i])
-            splice!(systemp.vapor.Afilm_end,i)
+            # splice!(systemp.vapor.Af_L,right_index[i])
+            splice!(systemp.vapor.Af_R,i)
             # splice!(systemp.vapor.Lfilm_start,right_index[i])
             splice!(systemp.vapor.Lfilm_end,i)   
             
-            splice!(systemp.vapor.Afilm_start,length(systemp.vapor.Afilm_start));
-            splice!(systemp.vapor.Afilm_start,1);
-            insert!(systemp.vapor.Afilm_start,1,p.vapor.Afilm_start[end])
+            splice!(systemp.vapor.Af_L,length(systemp.vapor.Af_L));
+            splice!(systemp.vapor.Af_L,1);
+            insert!(systemp.vapor.Af_L,1,p.vapor.Af_L[end])
 
             splice!(systemp.vapor.Lfilm_start,length(systemp.vapor.Lfilm_start));
             splice!(systemp.vapor.Lfilm_start,1);

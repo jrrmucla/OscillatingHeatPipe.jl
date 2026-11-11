@@ -1,35 +1,6 @@
-export PhpSystem_nomapping,UniformPhpSystem,UniformTube,Liquid,Vapor,Wall,PropConvert,Mapping,Cache
+export PhpSystem_nomapping,UniformPhpSystem,Liquid,Vapor,Wall,PropConvert,Mapping,Cache
 
 using Parameters
-
-"""
-UniformTube is a struct containing tube geometries
-    d           ::Float64   tube characteristic diameter
-    peri        ::Float64   tube perimeter (may be an arbitrary shape so cannot be derived from d)
-    Ac          ::Float64   tube cross-sectional area
-    L           ::Float64   tube one dimensional length
-    g           ::Float64   gravity vector along the plate
-    closedornot ::Bool      if the tube is closed loop or not (open loop)
-"""
-struct UniformTube
-    d::Float64
-    peri::Float64
-    Ac::Float64
-    L::Float64
-    g::Vector{Float64}
-    closedornot::Bool
-    N::Int64  
-end
-
-struct VariableTube
-    ξ_geometric_knots::Array{Float64,1}
-    Dh_geometric_knots::Array{Float64,1}
-    Pc_geometric_knots::Array{Float64,1}
-    Ac_geometric_knots::Array{Float64,1}
-    g::Vector{Float64}
-    closedornot::Bool
-    N::Int64
-end
 
 struct PropConvert
     fluid_type::String
@@ -53,9 +24,10 @@ Liquid is a struct containing liquid properties at a ref temperature
     α::Float64                              liquid heat diffusivity
     μₗ::Float64                              liquid dynamic viscosity
     σ::Float64                              liquid surface tension
-    Xp::Array{Tuple{Float64,Float64},1}     interface locations for each liquid slug
-    dXdt::Array{Tuple{Float64,Float64},1}   bulk velocity for each liquid slug
-    Xarrays::Array{Array{Float64,1},1}      finite difference location points within each liquid slug
+    ζ_L::Array{Tuple{Float64,Float64},1}     location (in volume coordinates) of the left interface of the i-th slug
+    ζ_R::Array{Tuple{Float64,Float64},1}     location (in volume coordinates) of the right interface of the i-th slug
+    Q_B::Array{Tuple{Float64,Float64},1}     bulk volumetric flow rate of the i-th slug
+    ξarrays::Array{Array{Float64,1},1}      finite difference location points (in length coordinates) within each liquid slug
     θarrays::Array{Array{Float64,1},1}      finite difference temperature points within each liquid slug
 """
 mutable struct Liquid
@@ -65,9 +37,10 @@ mutable struct Liquid
     αₗ::Float64
     μₗ::Float64
     σ::Float64
-    Xp::Array{Tuple{Float64,Float64},1}
-    dXdt::Array{Tuple{Float64,Float64},1}
-    Xarrays::Array{Array{Float64,1},1}
+    ζ_L::Array{Float64,1}
+    ζ_R::Array{Float64,1}
+    Q_B::Array{Float64,1}
+    ξarrays::Array{Array{Float64,1},1}
     θarrays::Array{Array{Float64,1},1}
 end
 
@@ -77,7 +50,7 @@ Vapor is a struct containing vapor properties at a ref temperature
     k::Float64              heat conductivity of liquid in the film
     δmin::Float64           the delta with maximum heat transfer coefficient in the H interpolation
     P::Array{Float64,1}     pressure in each vapor
-    Afilm_start, Afilm_end::Vector{Float64}  cross-sectional film areas (m²); use getδFromδarea for thickness
+    Af_L, Af_R::Vector{Float64}  cross-sectional film areas (m²); use getδFromδarea for thickness
 end
 """
 @with_kw mutable struct Vapor
@@ -88,8 +61,8 @@ end
     Eratio_plus::Float64            = 0.15
     Eratio_minus::Float64           = 0.0
     P::Array{Float64,1}
-    Afilm_start::Array{Float64,1}
-    Afilm_end::Array{Float64,1}
+    Af_L::Array{Float64,1}
+    Af_R::Array{Float64,1}
     Lfilm_start::Array{Float64,1}
     Lfilm_end::Array{Float64,1}
 end
@@ -131,9 +104,6 @@ mutable struct Mapping
     H_interp_liquidtowall    :: AbstractInterpolation
     P_interp_liquidtowall    :: AbstractInterpolation
     heightg_interp           :: AbstractInterpolation
-    Dh_tube_to_liquid           :: Union{Nothing,AbstractInterpolation}
-    Pc_tube_to_liquid           :: Union{Nothing,AbstractInterpolation}
-    Ac_tube_to_liquid           :: Union{Nothing,AbstractInterpolation}
 end
 
 """
@@ -186,8 +156,8 @@ PhpSystem_nomapping is a struct containing
     Wall
 It is used while initializing either PHP system before its Mapping is available.
 """
-mutable struct PhpSystem_nomapping <: AbstractPHP
-    tube    ::Union{UniformTube,VariableTube}
+mutable struct PhpSystem_nomapping{T<:Union{UniformTube,VariableTube}} <: AbstractPHP
+    tube    ::T
     liquid  ::Liquid
     vapor   ::Vapor
     wall    ::Wall

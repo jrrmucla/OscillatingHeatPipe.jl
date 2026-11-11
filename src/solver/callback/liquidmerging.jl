@@ -16,17 +16,17 @@ function merging_affect!(integrator)
 
     Ac = p.tube.Ac
 
-    d = p.tube.d
-    Afilm_start = p.vapor.Afilm_start
-    Afilm_end = p.vapor.Afilm_end
+    d = p.tube.Dh
+    Af_L = p.vapor.Af_L
+    Af_R = p.vapor.Af_R
     Lfilm_start = p.vapor.Lfilm_start
     Lfilm_end = p.vapor.Lfilm_end
 
-    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Afilm_start - Lfilm_end .* Afilm_end
+    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Af_L - Lfilm_end .* Af_R
     @unpack PtoD = p.propconvert
     M = PtoD.(p.vapor.P) .* volume_vapor
 
-    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,Afilm_start,Afilm_end,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
+    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
 
     resize!(integrator.u,size(unew,1)::Int)
     integrator.u = deepcopy(unew)
@@ -35,7 +35,7 @@ end
 function merging_condition(u,t,integrator)     # only for closed loop tube
 
     p = getcurrentsys_nowall!(integrator.u,integrator.p);
-    # δv = p.tube.d > (integrator.dt*maximum(p.liquid.dXdt)[1]) ? p.tube.d : (integrator.dt*maximum(p.liquid.dXdt)[1])
+    # δv = p.tube.Dh > (integrator.dt*maximum(p.liquid.dXdt)[1]) ? p.tube.Dh : (integrator.dt*maximum(p.liquid.dXdt)[1])
     δv = DEFAULT_LIQUID_MERGE_FRAC*p.wall.L_newbubble
 
     sys = p
@@ -138,8 +138,8 @@ function merging(p,i)
     #     insert!(systemp.liquid.dXdt,length(systemp.liquid.dXdt)+1,(dXdtnewonevalue,dXdtnewonevalue))
     # end
 
-    splice!(systemp.vapor.Afilm_start,i)
-    splice!(systemp.vapor.Afilm_end,i)
+    splice!(systemp.vapor.Af_L,i)
+    splice!(systemp.vapor.Af_R,i)
     splice!(systemp.vapor.Lfilm_start,i)
     splice!(systemp.vapor.Lfilm_end,i)
     splice!(systemp.vapor.P,i)
