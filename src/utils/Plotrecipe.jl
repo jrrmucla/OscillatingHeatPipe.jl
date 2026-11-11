@@ -6,6 +6,77 @@ mutable struct OHP end
 
 mutable struct OHPTemp end
 mutable struct OHPDh end
+
+export OHPGravity
+mutable struct OHPGravity end
+
+"""
+    plot(OHPGravity(), result::SimulationResult)
+    plot(OHPGravity(), x, y, potential; closedornot=false)
+    plot(OHPGravity(), x, y, potential_matrix)
+
+Color the tube centerline by gravitational potential per unit mass [J/kg].
+The result form uses the solver's stored `heightg_interp`, including custom
+potential functions and their reference level. The coordinate form accepts
+one potential value per point; `closedornot=true` joins the last point to the first.
+The matrix form draws a spatial heatmap with rows corresponding to `y` and
+columns to `x`. Supply the prescribed potential field explicitly: the tube
+interpolant alone does not define a potential away from the centerline.
+"""
+@recipe function f(::OHPGravity, result::SimulationResult)
+    sys = result.integrator_tube.p
+    model = result.integrator_plate.p.forcing["heating models"][end]
+    shape = model.transform(model.shape)
+    potential = sys.mapping.heightg_interp.(sys.wall.Xarray)
+    closedornot := sys.tube.closedornot
+    OHPGravity(), shape.x, shape.y, potential
+end
+
+@recipe function f(::OHPGravity, x::AbstractVector, y::AbstractVector,
+                   potential::AbstractMatrix)
+    size(potential) == (length(y), length(x)) ||
+        throw(ArgumentError("potential matrix must have size (length(y), length(x))"))
+    all(isfinite, potential) || throw(ArgumentError("potential must be finite"))
+    seriestype := :heatmap
+    aspect_ratio --> :equal
+    legend --> false
+    grid --> false
+    xlabel --> "x [m]"
+    ylabel --> "y [m]"
+    title --> "Gravitational potential"
+    color --> :viridis
+    colorbar --> true
+    colorbar_title --> "Potential [J/kg]"
+    right_margin --> 5mm
+    lo, hi = extrema(potential)
+    clims --> (lo == hi ? (lo - 0.5, hi + 0.5) : (lo, hi))
+    x, y, potential
+end
+
+@recipe function f(::OHPGravity, x::AbstractVector, y::AbstractVector,
+                   potential::AbstractVector; closedornot=false)
+    length(x) == length(y) == length(potential) ||
+        throw(ArgumentError("coordinates and potential must have equal lengths"))
+    length(x) >= 2 || throw(ArgumentError("the centerline must contain at least two points"))
+    all(isfinite, potential) || throw(ArgumentError("potential must be finite"))
+    seriestype := :path
+    aspect_ratio --> :equal
+    legend --> false
+    grid --> false
+    xlabel --> "x [m]"
+    ylabel --> "y [m]"
+    title --> "Gravitational potential"
+    linewidth --> 3
+    linecolor --> :viridis
+    colorbar --> true
+    colorbar_title --> "Potential [J/kg]"
+    right_margin --> 5mm
+    lo, hi = extrema(potential)
+    clims --> (lo == hi ? (lo - 0.5, hi + 0.5) : (lo, hi))
+    line_z := closedornot ? [potential; potential[1]] : potential
+    closedornot ? ([x; x[1]], [y; y[1]]) : (x, y)
+end
+
 mutable struct OHPSlug end
 mutable struct OHPPres end
 mutable struct OHPSuper end
