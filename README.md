@@ -1,13 +1,7 @@
 # OscillatingHeatPipe.jl
+This package is build upon [OscillatingHeatPipe.jl by Yuxuan Li](https://github.com/liyuxuan48/OscillatingHeatPipe.jl). Currently standalone until research is in an acceptable state to publish, at which time it could move to a fork.
 
-[![Build Status](https://github.com/liyuxuan48/OscillatingHeatPipe.jl/workflows/CI/badge.svg)](https://github.com/liyuxuan48/OscillatingHeatPipe.jl/actions)
-[![Coverage](https://codecov.io/gh/liyuxuan48/OscillatingHeatPipe.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/liyuxuan48/OscillatingHeatPipe.jl)
-[![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://liyuxuan48.github.io/OscillatingHeatPipe.jl)
-
-`OscillatingHeatPipe.jl` simulates an oscillating heat pipe (OHP) coupled to a two-dimensional
-heat-conduction plate. It provides tools for defining OHP channels, heaters, and condensers,
-initializing the tube and plate systems, time-marching the coupled problem, saving results, and
-post-processing temperatures, pressure, slug motion, and boiling statistics.
+`OscillatingHeatPipe.jl` simulates an oscillating heat pipe (OHP) coupled to a two-dimensional heat-conduction plate. It provides tools for defining OHP channels, heaters, and condensers, initializing the tube and plate systems, time-marching the coupled problem, saving results, and post-processing temperatures, pressure, slug motion, and boiling statistics.
 
 ![Oscillating heat pipe animation](animation.gif)
 
@@ -33,7 +27,7 @@ Start Julia and run:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/liyuxuan48/OscillatingHeatPipe.jl.git")
+Pkg.add(url="https://github.com/jrrmucla/NonuniformOhp.git")
 Pkg.add(["Plots", "JLD2", "XLSX", "ProgressMeter", "IJulia"])
 ```
 
