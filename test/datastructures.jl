@@ -1,10 +1,14 @@
 using Statistics
+# needs update for new liquid / state vector
 
 @testset "Liquid and vapor arrays" begin
 
     L, Lmin, ϕ0 = 4.0 + rand(), 0.001, 0.6 + 0.1*rand()
     for closedornot in [true,false]
-        X, dXdt, liquid_realratio = randomXp(L,Lmin,closedornot;chargeratio=ϕ0)
+        # Unit cross-sectional area makes volume and length coordinates coincide.
+        ζ_L, ζ_R, Q_B, liquid_realratio = randomζ(L,Lmin,closedornot;chargeratio=ϕ0)
+        X = collect(zip(ζ_L, ζ_R))
+        dXdt = [(q, q) for q in Q_B]
 
         # if this is a closed case, then shift it so that the last
         # slug crosses the line. Ensures more robust testing

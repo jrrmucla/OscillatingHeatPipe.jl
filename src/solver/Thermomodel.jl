@@ -113,6 +113,7 @@ function _closed_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adepos
     v_liquid_right_final = [@view v_vapor_start_final[2:end];v_vapor_start_final[1]]
 
     # this looks like an implementation of the liquid momentum equation (6)
+    # needs update for new liquid / state vector to correct units
     for i = 1:numofliquidslug
         du[2*i-1] = v_liquid_left_final[i]
         du[2*i] = v_liquid_right_final[i]
@@ -121,10 +122,9 @@ function _closed_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adepos
             du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[i+1]) + dLdt_liquid[i]
         else
             du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[1]) + dLdt_liquid[i]
-        end                
+        end
 
         du[2*numofliquidslug + 2*i] = du[2*numofliquidslug + 2*i-1]
-
     end
 
     du[4*numofliquidslug+1:5*numofliquidslug] = dMdt_latent_start+dMdt_latent_end
@@ -143,12 +143,12 @@ end
 function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
     # 1st derivative of state vector w.r.t. time
     
-    # u = [ζ_L (N entries), ζ_R (N entries), Q_B (N entires), ]
-    #      m^3              m^3              m^3/s            
-    
+    # u = [ζ_L (n); ζ_R (n); Q_B (n); M (n*); Af_L (n*); Af_R (n*); Lfilm_start (n*); Lfilm_end (n*)]
+    #      m^3      m^3      m^3/s    kg      m^2        m^2        m                 m
+
     du = zeros(size(u))
-    # du/dt = [Q_L (N entries), Q_R (N entires), dQᵦdt (N entries), ]
-    #          m^3/s            m^3/s            m^3/s^2
+    # du/dt = [Q_L (n); Q_R (n); dQᵦdt (n); ṁ (n*); ]
+    #          m^3/s    m^3/s    m^3/s^2    kg/s
 
     # extracts essential information stored at sys::UniformPhpSystem
     sys :: UniformPhpSystem = php_sys
@@ -389,7 +389,7 @@ function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::Uniform
         dMdt_latent_start_positive = dMdt_latent_start_positive.*heaviside.(Af_L .- minimum_film_area)
         dMdt_latent_end_positive = dMdt_latent_end_positive.*heaviside.(Af_R .- minimum_film_area)
 
-            return dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive
+        return dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive
 end
 
 """

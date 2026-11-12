@@ -3,6 +3,7 @@ using Random
 using Test
 using ProgressMeter
 using Plots
+# needs update for new liquid / state vector
 
 regression_zero_flux(t, x, base_cache, phys_params, motions) = zeros_surface(base_cache)
 

@@ -1,13 +1,13 @@
 using Statistics
 using Interpolations
 using LinearAlgebra
+# needs update for new liquid / state vector
 
 heaviside(x::AbstractFloat) = ifelse(x < 0, zero(x), ifelse(x > 0, one(x), oftype(x,0.0)))
 
 hc = 4500 # condenser coeff
 h_adiabatic = 160 # adiabatic coeff
 length_ohpchannel_mm = 141 # x range of the ohp in mm
-power = 30 # Watt
 
 ρₛ = 2730; # material density [kg/m^3] Aluminum3003-O
 cₛ  = 8.93e02; # material specific heat [J/kg K]
@@ -19,11 +19,11 @@ kₛ  = 1.93e02; # material heat conductivity Aluminum3003-O
 
 dₛ = 1.37e-3; # effective d (The thickness of an ideal uniform thickness plate occupying the same volume)
 
-Tref = 291.15# reference temperature (try higher!)
+Tref = 291.15;
 fluid_type = "Butane"
-p_fluid = SaturationFluidProperty(fluid_type,Tref) # This function relies on CoolProp.jl package
+p_fluid = SaturationFluidProperty(fluid_type,Tref)
 
-tube_d = 1e-3
+tube_diameter = 1e-3
 
 Δx = 0.000633 # [m]
 
@@ -34,12 +34,11 @@ ylim = (-Ly/2,Ly/2) # plate y limits
 
 g = PhysicalGrid(1.03 .* xlim,1.1 .* ylim,Δx); # build a gird slightly larger than the plate
 
-# power = 80 # Watt
+power = 30 # Watt
 areaheater_area = 50e-3 * 50e-3
 
 phys_params = Dict( "diffusivity"              => αₛ,
                     "flux_correction"          => ρₛ*cₛ*dₛ,
-                    # "angular velocity"         => 0.0,
                     "Fourier"                  => 1.0,
                     "ohp_flux"                 => [NaN], # initial value, the value here is useless
                     "areaheater_power"         => power, # total power
@@ -95,7 +94,6 @@ function heatermodel!(σ,T,t,fr::AreaRegionCache,phys_params)
     σ .= phys_params["areaheater_power"] / phys_params["areaheater_area"] / phys_params["flux_correction"] 
 end
 
-
 function condensermodel!(σ,T,t,fr::AreaRegionCache,phys_params)
     T0 = phys_params["areaheater_temp"]
     h = phys_params["areaheater_coeff"]
@@ -127,15 +125,15 @@ cond1 = AreaForcingModel(fregion1_c,tr1_c,condensermodel!);
 cond2 = AreaForcingModel(fregion2_c,tr2_c,adiabaticmodel!);
 
 # x, y = construct_ohp_curve("ASETS",Δx) # get x and y coordinates for the channel
-    ds = 1.5Δx
-    nturn = 16
-    width_ohp = 1.821*INCHES - tube_d
-    length_ohp = 5.34*INCHES + (length_ohpchannel_mm *1e-3 - 5.34*INCHES)
-    gap = 0.11INCHES - 0.5*tube_d
-    pitch = width_ohp/(2*nturn+1)
+ds = 1.5Δx
+nturn = 16
+width_ohp = 1.821*INCHES - tube_diameter
+length_ohp = 5.34*INCHES + (length_ohpchannel_mm *1e-3 - 5.34*INCHES)
+gap = 0.11INCHES - 0.5*tube_diameter
+pitch = width_ohp/(2*nturn+1)
 
-    x0, y0 = Lx_a/2 - 0.34*INCHES - 0.5*tube_d + (length_ohpchannel_mm *1e-3 - 5.34*INCHES), width_ohp/2
-    x, y, xf, yf = construct_ohp_curve(nturn,pitch,length_ohp,gap,ds,x0,y0,false,false,3pi/2)
+x0, y0 = Lx_a/2 - 0.34*INCHES - 0.5*tube_diameter + (length_ohpchannel_mm *1e-3 - 5.34*INCHES), width_ohp/2
+x, y, xf, yf = construct_ohp_curve(nturn,pitch,length_ohp,gap,ds,x0,y0,false,false,3pi/2)
 
 ohp = BasicBody(x,y) # build a BasicBody based on x,y
 

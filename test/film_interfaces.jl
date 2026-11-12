@@ -1,6 +1,7 @@
 using Test
 using Interpolations
 using OscillatingHeatPipe
+# needs update for new liquid / state vector
 
 @testset "Film interface areas: constant geometry" begin
     ohp = OscillatingHeatPipe

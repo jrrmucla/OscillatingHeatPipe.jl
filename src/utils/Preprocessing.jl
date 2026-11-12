@@ -1,108 +1,68 @@
-export SimulationResult,onesideXp,randomXp,initialize_ohpsys,store!
+export SimulationResult,randomζ,initialize_ohpsys,store!
 
 """
-(WIP)
+    randomζ(tube; numofslugs=DEFAULT_SLUGNUM,
+            chargeratio=DEFAULT_LIQUID_CHARGE_RATIO, σ_charge=DEFAULT_SIGMA_CHARGE)
+    randomζ(V, Vmin, closedornot; kwargs...)
 
-a more general way to generate the liquid slugs
+Randomly generate liquid slugs in volume coordinate ζ
+
+Params:
+- tube, either a UniformTube or VariableTube
+- chargeratio, expected volume fraction of liquid in the OHP
+- σ_charge, standard deviation in charge ratio  
+
+Returns:
+- ζ0_L, ζ0_R, Q_B, actual_charge_ratio
 """
-
-function onesideXp(ohp,tube::UniformTube,line)
-    
-    A = line[1]
-    B = line[2]
-    C = line[3]
-    sign = line[4]
-
-    L = tube.L
-    Lmin = tube.Dh
-    
-    body = ohp.body
-    
-    largeorsmall = A .* body.x .+ B .* body.y .+ C .< 0
-
-    ls_label = xor.(largeorsmall, [largeorsmall[2:end];largeorsmall[1]])
-    X0array_label = findall(!iszero,ls_label)
-    X0array = ohp.arccoordmid[X0array_label]
-
-    X0 = map(tuple,X0array[1:2:end], X0array[2:2:end])
-
-    dXdt0 = [zero.(X) for X in X0]
-
-    Ls = XptoLliquidslug(X0,L)
-    real_ratio = sum(Ls)/L
-    
-    X0,dXdt0,real_ratio
+function randomζ(tube::UniformTube; kwargs...)
+    return randomζ(tube.Ac * tube.L, tube.Ac * tube.Dh, tube.closedornot; kwargs...)
 end
 
-"""
-    randomXp(L::Real,Lmin::Real,closedornot::Bool;[numofslugs=30,chargeratio=0.46,σ_charge=0.01])
-
-Generates a random distribution of `numofslugs` liquid slugs in a length `L`,
-with a nominal liquid slug volume fraction `liquid_realratio` and with length standard deviation
-`σ_charge`.
-
-It outputs: an array of tuple of the liquid slug start/end arc length coordinates, 
-an array of slug velocities of the same length but set to zero, and 
-the actual volume fraction of the constructed liquid slugs.
-"""
-function randomXp(tube::UniformTube; kwargs...)
-    @unpack L,d,closedornot = tube
-
-    randomXp(L::Real,d::Real,closedornot::Bool; kwargs...)
+function randomζ(tube::VariableTube; kwargs...)
+    V = map_ξ_to_ζ(tube, _tube_length(tube))
+    Vmin = minimum(tube.Ac_geometric_knots .* tube.Dh_geometric_knots)
+    return randomζ(V, Vmin, tube.closedornot; kwargs...)
 end
 
-randomXp(tube::VariableTube; kwargs...) =
-    randomXp(_tube_length(tube), minimum(tube.Dh_geometric_knots), tube.closedornot; kwargs...)
+function randomζ(V::Real, Vmin::Real, closedornot::Bool;
+                 numofslugs=DEFAULT_SLUGNUM,
+                 chargeratio=DEFAULT_LIQUID_CHARGE_RATIO,
+                 σ_charge=DEFAULT_SIGMA_CHARGE)
+    V > 0 || throw(ArgumentError("Total tube volume must be positive"))
+    Vmin >= 0 || throw(ArgumentError("Minimum slug volume must be nonnegative"))
+    numofslugs > 0 || throw(ArgumentError("Number of slugs must be positive"))
+    (closedornot || numofslugs > 1) ||
+        throw(ArgumentError("An open tube requires at least two boundary slugs"))
 
-function randomXp(L::Real,Lmin::Real,closedornot::Bool;numofslugs=DEFAULT_SLUGNUM,
-                                                       chargeratio=DEFAULT_LIQUID_CHARGE_RATIO,
-                                                       σ_charge=DEFAULT_SIGMA_CHARGE)
+    σ_per_section = σ_charge * V / sqrt(numofslugs)
+    V_per_section = V / numofslugs
+    V_per_slug = V_per_section * chargeratio
+    
+    volumes = abs.((rand(numofslugs) .- 0.5) .* sqrt(12) .* σ_per_section .+ V_per_slug)
+    minimum(volumes) > Vmin && maximum(volumes) < V_per_section ||
+        error("Generation of random slugs failed.")
+        # either we are trying to generate too-small slugs
+        # or slugs so large they'd overlap with each other
 
+    # place one slug at the start of each section
+    ζ_L = collect(0:numofslugs-1) .* V_per_section
+    ζ_R = ζ_L .+ volumes
 
-    σ_persection = σ_charge*L/sqrt(numofslugs)
-
-    L_perslug=L/numofslugs*chargeratio
-    L_persection=L/numofslugs
-
-    Ls = abs.((rand(numofslugs) .- 0.5).*sqrt(12).*σ_persection .+ L_perslug)
-
-    Xp1s = zeros(numofslugs);
-    Xp2s = deepcopy(Xp1s);
-
-    if minimum(Ls) > Lmin && maximum(Ls) < L_persection
-        if closedornot == true
-
-            for i in eachindex(Xp1s)
-                Xp1s[i] = (i-1)*L_persection
-                Xp2s[i] = Xp1s[i] + Ls[i]
-            end
-
-            displacement = L*rand()
-
-            Xp1s = mod.(Xp1s.+displacement,L)
-            Xp2s = mod.(Xp2s.+displacement,L)
-
-        # add openloop(starting from 0 for simplicity for now)
-        elseif closedornot == false && numofslugs != 1
-            for i in eachindex(Xp1s[1:end-1])
-                Xp1s[i] = (i-1)*L_persection
-                Xp2s[i] = Xp1s[i] + Ls[i]
-            end
-            Xp2s[end] = L
-            Xp1s[end] = Xp2s[end] - Ls[end]
-
-            displacement = 0.0
-        end
-
+    if closedornot
+        # shift them randomly down the tube, then apply PCB
+        displacement = V * rand()
+        ζ_L .= mod.(ζ_L .+ displacement, V)
+        ζ_R .= mod.(ζ_R .+ displacement, V)
     else
-        error("Generation of random slugs failed")
+        # place the final slug against the far wall
+        ζ_R[end] = V
+        ζ_L[end] = V - volumes[end]
     end
 
-    X0 = map(tuple,Xp1s,Xp2s)
-    dXdt0 = [zero.(X) for X in X0]
-    liquid_realratio = sum(Ls)/L
-
-    X0,dXdt0,liquid_realratio
+    Q_B = zeros(numofslugs) # no initial velocity
+    actual_charge_ratio = sum(volumes) / V
+    return ζ_L, ζ_R, Q_B, actual_charge_ratio
 end
 
 """
@@ -191,34 +151,38 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     @unpack fluid_type,Tref,kₗ,ρₗ,Cpₗ,αₗ,μₗ,σ = p_fluid  
 
     # PropConvert
-    # an interpolation between different working fluid propeties (currently assuming saturated gas curve)
+    # an interpolation between different working fluid properties (currently assuming saturated gas curve)
     propconvert = PropConvert(fluid_type)
 
     # Liquid
+    # TODO: This is fine for uniform tube but must be allowed to vary for a uniform tube
+    # plus shouldn't be calculate Nu based on slug properties?
     Hₗ = p_fluid.kₗ/d * Nu # Nusselt number given
-    X0,dXdt0,liquid_realratio = randomXp(tube,numofslugs=slugnum,chargeratio=ch_ratio,σ_charge=σcharge) # chargeratio here is nominal volume fraction for liquid slugs only, it is slightly different from actual volume fraction.
-    Xarrays,θarrays = constructXarrays(X0,N,Tref,L)
+
+    ζ0_L,ζ0_R,Q0_B,liquid_realratio = randomζ(tube,numofslugs=slugnum,chargeratio=ch_ratio,σ_charge=σcharge) # chargeratio here is nominal volume fraction for liquid slugs only, it is slightly different from actual volume fraction.
+    ξ0 = collect(zip(map_ζ_to_ξ(tube, ζ0_L), map_ζ_to_ξ(tube, ζ0_R)))
+    Xarrays,θarrays = constructXarrays(ξ0,N,Tref,L)
     
-    liquids=Liquid(Hₗ,ρₗ,Cpₗ,αₗ,μₗ,σ,X0,dXdt0,Xarrays,θarrays)
+    liquids=Liquid(Hₗ,ρₗ,Cpₗ,αₗ,μₗ,σ,ζ0_L,ζ0_R,Q0_B,Xarrays,θarrays)
 
     # Vapor
     @unpack TtoP = propconvert
 
-    Lvaporplug = XptoLvaporplug(X0,L,tube.closedornot)
+    Lvaporplug = XptoLvaporplug(ξ0,L,tube.closedornot)
     P_initial = zero(Lvaporplug) .+ TtoP(Tref)
-    Xpvapor = getXpvapor(X0, tube.closedornot)
+    Xpvapor = getXpvapor(ξ0, tube.closedornot)
     Af_L_initial, Af_R_initial = _initial_film_areas(tube, Xpvapor, δfilm_relative)
     Lfilm_start_initial = 0.5 .* film_fraction .* Lvaporplug
     Lfilm_end_initial   = deepcopy(Lfilm_start_initial)
     vapors=Vapor(ad_fac=inertia_f,k = p_fluid.kₗ,P=P_initial,Af_L=Af_L_initial,Af_R=Af_R_initial,Lfilm_start=Lfilm_start_initial,Lfilm_end=Lfilm_end_initial,Eratio_plus=ηplus,Eratio_minus=ηminus);
 
     # Wall
-    Xstations = sort(rand(nucleatenum) .* L);
-    Xstation_time = zeros(nucleatenum);
+    ξ_boiling_stations = sort(rand(nucleatenum) .* L);
+    ξ_station_time = zeros(nucleatenum);
     boil_type = "wall T"
     boil_interval = boil_waiting_time
     Xwallarray,θwallarray,curvwallarray = constructwallXθarray(arccoordmid(ohp.shape),Tref,curvature(ohp.shape));
-    wall = Wall(boil_interval=boil_interval,fluid_type=fluid_type,boil_type=boil_type,power=power,L_newbubble=L_newbubble,Xstations=Xstations,boiltime_stations=Xstation_time,Xarray=Xwallarray,θarray=θwallarray,curvarray=curvwallarray,Rn=Rn_boil);
+    wall = Wall(boil_interval=boil_interval,fluid_type=fluid_type,boil_type=boil_type,power=power,L_newbubble=L_newbubble,Xstations=ξ_boiling_stations,boiltime_stations=ξ_station_time,Xarray=Xwallarray,θarray=θwallarray,curvarray=curvwallarray,Rn=Rn_boil);
 
     # Mapping
     @unpack x,y = ohp.transform(ohp.shape)

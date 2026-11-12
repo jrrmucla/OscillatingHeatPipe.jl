@@ -1,9 +1,10 @@
 using Test
 using Random
 using OscillatingHeatPipe
+# needs update for new liquid / state vector
 
 """
-Problem: For non-uniform tubes, the line source in the ILM problem doesn't contain thickness, 
+Problem: For non-uniform tubes, the line source in the ILM problem doesn't contain non-uniform cross-section, 
 so initialize_ohpsys can't build an accurate tube struct for the system.
 
 Solution: We can give initialize_ohpsys a preexisting tube struct, and it will run verification

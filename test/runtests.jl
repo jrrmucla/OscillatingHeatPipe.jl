@@ -54,6 +54,7 @@ if GROUP == "All" || GROUP == "Auxiliary"
     include("film_geometry.jl")
     include("film_interfaces.jl")
     include("initialization.jl")
+    include("preprocessing.jl")
     include("thermomodel.jl")
     include("correlations.jl")
     include("integrator.jl")
