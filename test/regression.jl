@@ -257,22 +257,22 @@ function compare_regression_state(actual, expected)
 
     # this exists to support both closed and open tube layouts
     last_mechanical = first(actual_separators) - 1
-    @test rem(last_mechanical, 9) in (0, 4)
-    rem(last_mechanical, 9) in (0, 4) || return
-    a = OscillatingHeatPipe.u_to_XMAL(actual[1:last_mechanical])
-    b = OscillatingHeatPipe.u_to_XMAL(expected[1:last_mechanical])
+    @test rem(last_mechanical, 8) in (0, 3)
+    rem(last_mechanical, 8) in (0, 3) || return
+    a = OscillatingHeatPipe.u_to_ζMAL(actual[1:last_mechanical])
+    b = OscillatingHeatPipe.u_to_ζMAL(expected[1:last_mechanical])
 
     # because our values span so many orders of magnitude, 
     # we use different tolerances for each
-    names = (:positions, :velocities, :vapor_mass, :film_area_start,
+    names = (:ζ_L, :ζ_R, :Q_B, :vapor_mass, :film_area_start,
              :film_area_end, :film_length_start, :film_length_end)
-    atols = (1e-9, 1e-8, 1e-12, 1e-14, 1e-14, 1e-9, 1e-9)
+    atols = (1e-15, 1e-15, 1e-14, 1e-12, 1e-14, 1e-14, 1e-9, 1e-9)
 
     for j in eachindex(names)
         @testset "$(names[j])" begin
-            # flatten any tuples we encounter (like interface positions)
-            av = j <= 2 ? collect(Iterators.flatten(a[j])) : a[j]
-            bv = j <= 2 ? collect(Iterators.flatten(b[j])) : b[j]
+            # Each state block is a vector of scalar quantities.
+            av = a[j]
+            bv = b[j]
             compare_regression_array(av, bv; atol=atols[j])
         end
     end

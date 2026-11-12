@@ -54,7 +54,7 @@ function fixdx_affect!(integrator)
 
     θ_interp_liquidtowall = p.mapping.θ_interp_liquidtowall
 
-    Lliquid = XptoLliquidslug(p.liquid.Xp,sys.tube.L)
+    Lliquid = ξ_to_liquid_length(first.(p.liquid.Xp), last.(p.liquid.Xp), sys.tube.L)
     Nliquid = round.(Int, Lliquid./dξ_init) .+ 1;
 
     for i in indexReconstructSite
@@ -78,7 +78,7 @@ function fixdx_affect!(integrator)
     @unpack PtoD = p.propconvert
     M = PtoD.(p.vapor.P) .* volume_vapor
 
-    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
+    unew=[ζMAL_to_u(p.liquid.ζ_L,p.liquid.ζ_R,p.liquid.Q_B,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
 
     resize!(integrator.u,size(unew,1)::Int)
     integrator.u = deepcopy(unew)

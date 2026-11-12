@@ -1,5 +1,5 @@
 export getgvec,getgh,delta, # get actrual heightg of the tube
-XptoLvaporplug,XptoLliquidslug,getXpvapor, # transfer Xp to the length of vapors, length of liquids, and Xp for vapor.
+XptoLvaporplug,ξ_to_liquid_length,getXpvapor, # transfer Xp to the length of vapors, length of liquids, and Xp for vapor.
 # ifamong,constructXarrays,
 Hfilm,getδarea,getδFromδarea,getMvapor,getMfilm,getMliquid,getMtotal,getchargeratio,getVolumevapor,
 getCa,f_churchill,Catoδ,RntoΔT,systoM
@@ -50,24 +50,20 @@ function XptoLvaporplug(Xp::Vector{Tuple{Float64, Float64}},L::Float64,closedorn
 end
 
 """
-    XptoLliquidslug(Xp,L) -> Vector{Float64}
+    ξ_to_liquid_length(ξ_L, ξ_R, L)
 
-This function uses the set of coordinates `Xp` of every liquid/vapor interface,
-and length `L` of the tube to form an array of slug lengths.
+Return liquid slug lengths `mod(ξ_R - ξ_L, L)`, accounting for interfaces
+crossing the periodic boundary of a tube of length `L`. Accept either scalar
+coordinates or equally sized vectors of left and right coordinates.
+Coincident endpoints (including a difference of exactly `L`) return zero.
 """
-function XptoLliquidslug(Xp::Vector{Tuple{Float64, Float64}},L::Float64)
-
-    Lliquidslug = zeros(length(Xp))
-
-    for i = 1:length(Xp)
-        Lliquidslug[i] = mod((Xp[i][end] - Xp[i][1]),L)
-    end
-
-    return Lliquidslug
+function ξ_to_liquid_length(ξ_L::Real, ξ_R::Real, L::Real)
+    return mod(ξ_R - ξ_L, L)
 end
 
-
-
+function ξ_to_liquid_length(ξ_L::AbstractVector{<:Real}, ξ_R::AbstractVector{<:Real}, L::Real)
+    return mod.(ξ_R - ξ_L, L)
+end
 """
     getXpvapor(Xp::Vector{Tuple},closedornot) -> Vector{Tuple}
 
@@ -136,7 +132,7 @@ is set to `θi` uniformly.
 function constructXarrays(X0::Vector{Tuple{Float64, Float64}},N::Int,θinitial::Float64,L::Float64)
     Xarrays=Array{Array{Float64, 1}, 1}(undef, length(X0))
 
-    Lliquid = XptoLliquidslug(X0,L)
+    Lliquid = ξ_to_liquid_length(first.(X0), last.(X0), L)
     Nliquid = max.(ceil.(Int, N.*Lliquid./L),2)
 
     for i = 1:length(Xarrays)
@@ -360,7 +356,7 @@ function getMliquid(sys)
     L = _tube_length(tube)
     @unpack ρₗ, Xp = liquid
 
-    Lliquidslug = XptoLliquidslug(Xp,L)
+    Lliquidslug = ξ_to_liquid_length(first.(Xp), last.(Xp), L)
     return ρₗ .* _tube_region_volume.(Ref(tube), first.(Xp), Lliquidslug)
 
 end

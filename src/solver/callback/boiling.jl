@@ -55,7 +55,7 @@ function boiling_affect!(integrator)
     
     M = getMvapor(p)
 
-    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,p.vapor.Af_L,p.vapor.Af_R,p.vapor.Lfilm_start,p.vapor.Lfilm_end);liquidθtovec(p.liquid.θarrays)];
+    unew=[ζMAL_to_u(p.liquid.ζ_L,p.liquid.ζ_R,p.liquid.Q_B,M,p.vapor.Af_L,p.vapor.Af_R,p.vapor.Lfilm_start,p.vapor.Lfilm_end);liquidθtovec(p.liquid.θarrays)];
 
     resize!(integrator.u,length(unew))
     integrator.u = deepcopy(unew)
@@ -129,7 +129,7 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
 
     Lvaporplug = XptoLvaporplug(sysnew.liquid.Xp,sysnew.tube.L,sysnew.tube.closedornot)
     Lpurevapor = Lvaporplug .- Lfilm_start_new .- Lfilm_end_new
-    Lliquidslug = XptoLliquidslug(Xpnew,sys.tube.L)
+    Lliquidslug = ξ_to_liquid_length(first.(Xpnew), last.(Xpnew), sys.tube.L)
 
 
     maxindex = 0;

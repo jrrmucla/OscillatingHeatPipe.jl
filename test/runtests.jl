@@ -51,6 +51,7 @@ end
 if GROUP == "All" || GROUP == "Auxiliary"
     include("tube_geometry.jl")
     include("inner_coordinates.jl")
+    include("liquid_lengths.jl")
     include("film_geometry.jl")
     include("film_interfaces.jl")
     include("initialization.jl")
@@ -58,6 +59,7 @@ if GROUP == "All" || GROUP == "Auxiliary"
     include("thermomodel.jl")
     include("correlations.jl")
     include("integrator.jl")
+    include("statevectors.jl")
     include("datastructures.jl")
 end
 

@@ -28,7 +28,7 @@ function vaporMergingAffect!(integrator)
     @unpack PtoD = p.propconvert
     M = PtoD.(p.vapor.P) .* volume_vapor
 
-    unew=[XMAL_to_u(p.liquid.Xp,p.liquid.dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
+    unew=[ζMAL_to_u(p.liquid.ζ_L,p.liquid.ζ_R,p.liquid.Q_B,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(p.liquid.θarrays)];
 
     resize!(integrator.u,size(unew,1)::Int)
     integrator.u = deepcopy(unew)
@@ -58,7 +58,7 @@ function vaporMerging(p,i)
 
 
     # get the liquid interface velocities and lengthes for merging
-    Lliquidslug_old = XptoLliquidslug(p.liquid.Xp,p.tube.L)
+    Lliquidslug_old = ξ_to_liquid_length(first.(p.liquid.Xp), last.(p.liquid.Xp), p.tube.L)
     Lvaporplug =  XptoLvaporplug(p.liquid.Xp,p.tube.L,p.tube.closedornot)
 
 

@@ -18,78 +18,43 @@ Some notes on structures of liquid and vapor positions:
 =#
 
 """
-    X_to_u(Xp,dXdt) -> Vector
+    ζMAL_to_u(ζ_L, ζ_R, Q_B, M, Af_L, Af_R, Lfilm_start, Lfilm_end)
 
-Transform vectors `Xp`, `dXdt` with the coordinates and velocities of the liquid slug interfaces into
-a single state vector 
+Assemble `[ζ_L; ζ_R; Q_B; M; Af_L; Af_R; Lfilm_start; Lfilm_end]`.
+Interface coordinates are volumes (m³), bulk flow rates are m³/s, and film areas are m².
 """
-function X_to_u(Xp::Array{Tuple{Float64,Float64},1},dXdt::Array{Tuple{Float64,Float64},1})
-    Np = length(Xp)
-    u = zeros(4*Np)
-    
-    for i = 1:Np
-        # input Xp
-        u[2*i-1] = Xp[i][1]
-        u[2*i] = Xp[i][end]
-        # input dXdt
-        u[2*Np + 2*i-1] = dXdt[i][1]
-        u[2*Np + 2*i] = dXdt[i][end]
-    end
-    
-    return u
-end
-
-
-"""
-    XMAL_to_u(Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end) -> Vector
-
-Assemble vectors `Xp`, `dXdt` of the coordinates and velocities of the slug interfaces, and
-mass `M` of the vapor regions, `Af_L` and `Af_R` of cross-sectional film areas (m²), and `Lfilm_start`
-and `Lfilm_end` of film lengths, to form state vector.
-
-The blocks are `[positions; velocities; masses; Af_L; Af_R; Lfilm_start; Lfilm_end]`.
-Film areas are in m²; derive thickness with `getδFromδarea(Ac, d, A)`.
-"""
-function XMAL_to_u(Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end)
-    return ([X_to_u(Xp,dXdt);M;Af_L;Af_R;Lfilm_start;Lfilm_end])
+function ζMAL_to_u(ζ_L::Array{Float64,1}, ζ_R::Array{Float64,1}, Q_B::Array{Float64,1},M,Af_L,Af_R,Lfilm_start,Lfilm_end)
+    return ([ζ_L;ζ_R;Q_B;M;Af_L;Af_R;Lfilm_start;Lfilm_end])
 end
 
 """
-    u_to_XMAL(u) -> Vector{Tuple}, Vector{Tuple}, Vector, Vector, Vector, Vector, Vector
+    u_to_ζMAL(u)
 
-Disassemble the state vector `u` into vectors `Xp`, `dXdt` of the coordinates and velocities of the slug interfaces, and
-mass `M` of the vapor regions, `Af_L` and `Af_R` of cross-sectional film areas (m²), and `Lfilm_start`
-and `Lfilm_end` of film lengths.
+Return the eight blocks `(ζ_L, ζ_R, Q_B, M, Af_L, Af_R, Lfilm_start, Lfilm_end)`.
+Closed tubes have equal liquid/vapor counts; open tubes have one extra liquid slug.
 """
-function u_to_XMAL(u::Array{Float64,1})
+function u_to_ζMAL(u::AbstractVector)
+    # closed case: length = 8nL
+    # open case: length = 8nL-5
+    nV = div(length(u),8)
 
-    maxindex = div(length(u),9)
-    maxliquidindex = 0
-    if mod(length(u),9) == 4
-        maxliquidindex = maxindex + 1
-    elseif mod(length(u),9) == 0
-        maxliquidindex = maxindex
+    if mod(length(u),8) == 3
+        nL = nV + 1 # open ohp
+    elseif mod(length(u),8) == 0
+        nL = nV # closed ohp
     else
-        println("new function error")
         return error("new function error")
     end
 
-    Xp   = map(tuple, zeros(maxliquidindex), zeros(maxliquidindex))
-    dXdt = map(tuple, zeros(maxliquidindex), zeros(maxliquidindex))
-    
-    for i = 1:maxliquidindex
-        # input Xp
-        Xp[i] = (u[2*i-1],u[2*i])
-        # input dXdt
-        dXdt[i] = (u[2*maxliquidindex + 2*i-1],u[2*maxliquidindex + 2*i])
-    end
-
-    M =             u[4*maxliquidindex+1:           4*maxliquidindex+maxindex]
-    Af_L =        u[4*maxliquidindex+maxindex+1:  4*maxliquidindex+2maxindex]
-    Af_R =          u[4*maxliquidindex+2maxindex+1: 4*maxliquidindex+3maxindex]
-    Lfilm_start =   u[4*maxliquidindex+3maxindex+1: 4*maxliquidindex+4maxindex]
-    Lfilm_end =     u[4*maxliquidindex+4maxindex+1: 4*maxliquidindex+5maxindex]
-    return Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end
+    ζ_L =   u[1:nL]
+    ζ_R =   u[nL+1:2nL]
+    Q_B =   u[2nL+1:3nL]
+    M   =   u[3nL+1:3nL+nV]
+    Af_L =          u[3nL+nV+1:3nL+2nV]
+    Af_R =          u[3nL+2nV+1:3nL+3nV]
+    Lfilm_start =   u[3nL+3nV+1:3nL+4nV]
+    Lfilm_end =     u[3nL+4nV+1:3nL+5nV]
+    return ζ_L,ζ_R,Q_B,M,Af_L,Af_R,Lfilm_start,Lfilm_end
 end
 
 """
@@ -117,14 +82,13 @@ function wallθtovec(θwall::Vector{Float64})
 end
 
 function newstate(sys0::UniformPhpSystem)
-    @unpack Ac,d,L,closedornot = sys0.tube
-    @unpack Xp,dXdt = sys0.liquid
+    @unpack ζ_L, ζ_R, Q_B = sys0.liquid
     @unpack Af_L,Af_R,Lfilm_start,Lfilm_end,P = sys0.vapor
     @unpack PtoD = sys0.propconvert
 
     M = systoM(sys0::UniformPhpSystem)
 
-    u=[XMAL_to_u(Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
+    u=[ζMAL_to_u(ζ_L,ζ_R,Q_B,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
 end
 
 """
@@ -145,16 +109,21 @@ function getcurrentsys_nowall!(u,sys0)
         end
     end
 
-    Xp,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end = u_to_XMAL(u[1:indexes[1]-1])
+    ζ_L,ζ_R,Q_B,M,Af_L,Af_R,Lfilm_start,Lfilm_end = u_to_ζMAL(u[1:indexes[1]-1])
 
     if sys0.tube.closedornot == true 
-        modX!(Xp,sys0.tube.L)
+        tube_volume = map_ξ_to_ζ(sys0.tube, sys0.tube.L)
+        ζ_L .= mod.(ζ_L, tube_volume)
+        ζ_R .= mod.(ζ_R, tube_volume)
     end
     for i = 1:length(indexes)-1
     push!(θliquidrec, u[indexes[i]+1:indexes[i+1]-1])
     end
     push!(θliquidrec, u[indexes[end]+1:end])
 
+    ξ_L = map_ζ_to_ξ(sys0.tube, ζ_L)
+    ξ_R = map_ζ_to_ξ(sys0.tube, ζ_R)
+    Xp = collect(zip(ξ_L, ξ_R))
     Lvaporplug = XptoLvaporplug(Xp,sys0.tube.L,sys0.tube.closedornot)
 
     Ac = sys0.tube.Ac
@@ -173,10 +142,11 @@ function getcurrentsys_nowall!(u,sys0)
   
     sysnew = sys0
 
-    sysnew.liquid.Xp = Xp
-    sysnew.liquid.dXdt = dXdt
+    sysnew.liquid.ζ_L = ζ_L
+    sysnew.liquid.ζ_R = ζ_R
+    sysnew.liquid.Q_B = Q_B
     sysnew.liquid.θarrays = θliquidrec
-    sysnew.liquid.Xarrays = updateXarrays(Xp,sysnew.liquid.θarrays,sysnew.tube.L)
+    sysnew.liquid.ξarrays = updateXarrays(Xp,sysnew.liquid.θarrays,sysnew.tube.L)
 
     sysnew.vapor.P = P
     sysnew.vapor.Af_L = Af_L

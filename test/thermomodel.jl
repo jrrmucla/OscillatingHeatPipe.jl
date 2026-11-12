@@ -200,7 +200,7 @@ sys_plate = construct_system(prob);
 
         δdep = Catoδ(d,Ca,adjust_factor=ad_fac)
 
-        Lliquidslug = XptoLliquidslug(Xp,L)
+        Lliquidslug = ξ_to_liquid_length(first.(Xp), last.(Xp), L)
 
         Adeposit = Af_at_interfaces(sys_tube)
         Adeposit_left = [elem[1] for elem in Adeposit]
@@ -309,7 +309,7 @@ end
     @test all(isapprox.(uu_test2[1:2:2*numofslugs-1],0.0,atol=1e-12)) # velocity should remain the same
     @test all(isapprox.(uu_test2[2:2:2*numofslugs],0.0,atol=1e-12)) # velocity should remain the same
 
-    Lliquidslug = XptoLliquidslug(Xp,L)
+    Lliquidslug = ξ_to_liquid_length(first.(Xp), last.(Xp), L)
     lhs = ρₗ*Ac .* Lliquidslug
     @test all(uu_test2[2*numofslugs+1:2:4*numofslugs-1] .≈ [1,-1] .* (P1-P2)*Ac ./ lhs) # velocity should remain the same
     @test all(uu_test2[2*numofslugs+2:2:4*numofslugs]  .== uu_test2[2*numofslugs+1:2:4*numofslugs-1])
@@ -424,7 +424,7 @@ end
         u_tube = newstate(sys_tube) # initialize OHP tube
 
         uu_test3 = dynamicsmodel(u_tube[1:9*numofslugs],sys_tube)
-        # dX2,ddXdt2,dM2,dAf_L2,dAf_R2,dLfilm_start2,dLfilm_end2 = ComputationalHeatTransfer.u_to_XMAL(uu_test2)
+        # dζ_L2,dζ_R2,dQ_B2,dM2,dAf_L2,dAf_R2,dLfilm_start2,dLfilm_end2 = OscillatingHeatPipe.u_to_ζMAL(uu_test2)
 
         V_start_analytical = zeros(numofslugs)
         V_end_analytical = zeros(numofslugs)

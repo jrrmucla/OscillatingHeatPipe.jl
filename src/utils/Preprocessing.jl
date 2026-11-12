@@ -177,10 +177,14 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     vapors=Vapor(ad_fac=inertia_f,k = p_fluid.kₗ,P=P_initial,Af_L=Af_L_initial,Af_R=Af_R_initial,Lfilm_start=Lfilm_start_initial,Lfilm_end=Lfilm_end_initial,Eratio_plus=ηplus,Eratio_minus=ηminus);
 
     # Wall
+
+    # boiling stations
     ξ_boiling_stations = sort(rand(nucleatenum) .* L);
     ξ_station_time = zeros(nucleatenum);
     boil_type = "wall T"
     boil_interval = boil_waiting_time
+    
+    # thermal points of interaction with plate system
     Xwallarray,θwallarray,curvwallarray = constructwallXθarray(arccoordmid(ohp.shape),Tref,curvature(ohp.shape));
     wall = Wall(boil_interval=boil_interval,fluid_type=fluid_type,boil_type=boil_type,power=power,L_newbubble=L_newbubble,Xstations=ξ_boiling_stations,boiltime_stations=ξ_station_time,Xarray=Xwallarray,θarray=θwallarray,curvarray=curvwallarray,Rn=Rn_boil);
 

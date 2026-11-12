@@ -1,113 +1,59 @@
 using Statistics
+using Test
+using OscillatingHeatPipe
 # needs update for new liquid / state vector
 
-@testset "Liquid and vapor arrays" begin
-
+@testset "Liquid and Vapor arrays" begin
     L, Lmin, ϕ0 = 4.0 + rand(), 0.001, 0.6 + 0.1*rand()
     for closedornot in [true,false]
-        # Unit cross-sectional area makes volume and length coordinates coincide.
         ζ_L, ζ_R, Q_B, liquid_realratio = randomζ(L,Lmin,closedornot;chargeratio=ϕ0)
-        X = collect(zip(ζ_L, ζ_R))
-        dXdt = [(q, q) for q in Q_B]
+        ξ_L, ξ_R = ζ_L, ζ_R; # for uniform area of 1
 
         # if this is a closed case, then shift it so that the last
         # slug crosses the line. Ensures more robust testing
-        xshift = closedornot ? L - mean(X[end]) : 0.0
-        X .= map(u -> (mod(u[1]+xshift,L),mod(u[2]+xshift,L)),X)        
+        xshift = closedornot ? L - mean(ξ_LR[end]) : 0.0
+        ξ_L = mod(ξ_L + xshift, L);
+        ξ_R = mod(ξ_R + xshift, L);
 
-        lslug = mod.(map(u -> u[2],X) - map(u -> u[1],X),L)
-        @test all(lslug .> 0)
+        liquid_length = mod.(ξ_R - ξ_L, L)
+        @test all(liquid_length .> 0)
 
-        lslug2 = OscillatingHeatPipe.XptoLliquidslug(X,L)
-        @test lslug == lslug2
+        @test liquid_length == ξ_to_liquid_length(ξ_L,ξ_R, L)
 
-        ϕ = sum(lslug)/L
+        ϕ = sum(liquid_length)/L # actual charge ratio by length
         @test abs(ϕ - ϕ0) < 0.1
         @test ϕ ≈ liquid_realratio
-
-        Xvapor = OscillatingHeatPipe.getXpvapor(X,closedornot)
-        lvap = mod.(map(u -> u[2],Xvapor) - map(u -> u[1],Xvapor),L)
-        @test all(lvap .> 0)
-
-        lvap2 = OscillatingHeatPipe.XptoLvaporplug(X,L,closedornot)
         
-        @test lvap == lvap2
+        Xvapor = OscillatingHeatPipe.getXpvapor(ξ_LR,closedornot)
+        vapor_length = mod.(map(u -> u[2],Xvapor) - map(u -> u[1],Xvapor),L)
+        @test all(vapor_length .> 0)
+    
+        @test vapor_length == XptoLvaporplug(ξ_LR,L,closedornot)
 
-        # Continuity test
-        @test sum(lvap) + sum(lslug) ≈ L
+        # continuity test
+        @test sum(vapor_length) + sum(liquid_length) ≈ L
 
         # Test checking positions in liquid slugs.
-        np = length(X)
+        np = length(Q_B)
 
         # Liquid point should return true
         ir = rand(1:np-1)
-        @test OscillatingHeatPipe.ifamong(mean(X[ir]),X)
+        @test OscillatingHeatPipe.ifamong(mean(ξ_LR[ir]),ξ_LR)
 
         # Vapor point should return false
         ir = rand(2:np)
-        Xi, Xf = X[ir-1][2], X[ir][1]
-        @test !OscillatingHeatPipe.ifamong(0.5*(Xi+Xf),X)
+        Xi, Xf = ξ_LR[ir-1][2], ξ_LR[ir][1]
+        @test !OscillatingHeatPipe.ifamong(0.5*(Xi+Xf),ξ_LR)
 
         # Test creation of liquid slug arrays
         N = rand(200:300)
         θi = rand()
-        Xarray, θarray = OscillatingHeatPipe.constructXarrays(X,N,θi,L)
+        Xarray, θarray = OscillatingHeatPipe.constructXarrays(ξ_LR,N,θi,L)
         # check that all points lie between 0 and L
         @test all(map(u -> all(0 .<= u .<= L),Xarray))
         # both arrays for a slug are the same length
         @test all(map((u,v) -> length(u)==length(v),Xarray,θarray))
-
-
-        ## test assembly and disassembly 
-        
-        dXdt .= [(rand(),rand()) for j in 1:np]
-        u = OscillatingHeatPipe.X_to_u(X,dXdt)
-
-        ir = rand(1:np)
-        Xi, Xf = X[ir]
-        dXi, dXf = dXdt[ir]
-        @test u[2*ir] == Xf && u[2*ir-1] == Xi
-        @test u[2*np + 2*ir] == dXf && u[2*np + 2*ir - 1] == dXi
-
-        M = rand(np)
-        Af_L = rand(np)
-        Af_R = rand(np)
-        Lfilm_start = rand(np)
-        Lfilm_end = rand(np)
-        
-        # Test that assembly and disassembly are inverses of each other
-        u = OscillatingHeatPipe.XMAL_to_u(X,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end)
-
-        X2,dXdt2,M2,Af_L2,Af_R2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.u_to_XMAL(u)
-
-        @test X2 == X
-        @test dXdt2 == dXdt
-        @test M2 == M
-        @test Af_L2 == Af_L
-        @test Af_R2 == Af_R
-        @test Lfilm_start2 == Lfilm_start
-        @test Lfilm_end2 == Lfilm_end
-
-        # test a case in which there is one more X and dXdt element than the others
-        # This occurs in an open tube, e.g., vapor plugs at ends and one slug between them
-        # so that Xp contains (0,Xp1) and (Xpn,L) to describe the end vapor plugs.
-        X = [(rand(),rand()) for j in 1:np+1]
-        dXdt = [(rand(),rand()) for j in 1:np+1]
-        u = OscillatingHeatPipe.XMAL_to_u(X,dXdt,M,Af_L,Af_R,Lfilm_start,Lfilm_end)
-        X2,dXdt2,M2,Af_L2,Af_R2,Lfilm_start2,Lfilm_end2 = OscillatingHeatPipe.u_to_XMAL(u)
-
-        @test X2 == X
-        @test dXdt2 == dXdt
-        @test M2 == M
-        @test Af_L2 == Af_L
-        @test Af_R2 == Af_R
-        @test Lfilm_start2 == Lfilm_start
-        @test Lfilm_end2 == Lfilm_end
-
-        
-
     end
-
 end
 
 sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
@@ -124,10 +70,10 @@ sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
         @test !hasproperty(sys.vapor, :δend)
 
         u = newstate(sys)
-        mechanical_length = 4length(sys.liquid.Xp) + 5length(sys.vapor.P)
-        fields = OscillatingHeatPipe.u_to_XMAL(u[1:mechanical_length])
-        @test fields[4] == sys.vapor.Af_L
-        @test fields[5] == sys.vapor.Af_R
+        mechanical_length = 3length(sys.liquid.Q_B) + 5length(sys.vapor.P)
+        fields = OscillatingHeatPipe.u_to_ζMAL(u[1:mechanical_length])
+        @test fields[5] == sys.vapor.Af_L
+        @test fields[6] == sys.vapor.Af_R
 
         restored = getcurrentsys_nowall!(u,deepcopy(sys))
         @test restored.vapor.Af_L == sys.vapor.Af_L
@@ -205,7 +151,7 @@ end
     closedornot = sys_tube.tube.closedornot
 
     Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
-    Lliquidslug = XptoLliquidslug(Xp,L)
+    Lliquidslug = ξ_to_liquid_length(first.(Xp), last.(Xp), L)
 
     ρv = sys_tube.propconvert.PtoD.(sys_tube.vapor.P)
 
