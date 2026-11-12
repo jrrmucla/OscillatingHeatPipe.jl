@@ -163,7 +163,7 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
     liquid_velocity = Q_B ./ Ac
     liquid_length = liquid_ξ_right - liquid_ξ_left
     if closedornot
-        liquid_volume .= mod.(liquid_volume, Ac * L)
+        liquid_volume = ζ_to_liquid_volume(ζ_L, ζ_R, Ac * L)
         liquid_length .= mod.(liquid_length, L)
     end
     liquid_interfaces = collect(zip(liquid_ξ_left, liquid_ξ_right))
@@ -176,7 +176,7 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
     Adeposit_left, Adeposit_right = Af_at_interfaces(sys, liquid_ξ_left, liquid_ξ_right, liquid_velocity)
 
 
-    Lvaporplug = XptoLvaporplug(liquid_interfaces,L,closedornot)
+    Lvaporplug = ξ_to_vapor_length(liquid_ξ_left, liquid_ξ_right,L,closedornot)
 
     # get gravity potential
     heightg_interp = sys.mapping.heightg_interp
@@ -352,7 +352,7 @@ function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::Uniform
 
     dx_wall = sys.tube.L/sys.tube.N
 
-    # Lvapor = XptoLvaporplug(sys.liquid.Xp,sys.tube.L,sys.tube.closedornot)
+    # Lvapor = ξ_to_vapor_length(first.(sys.liquid.Xp), last.(sys.liquid.Xp),sys.tube.L,sys.tube.closedornot)
     # Lvapor_pure = max.(Lvapor - Lfilm_start - Lfilm_end,0.0)
 
     # axialrhs_total = 0

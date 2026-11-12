@@ -121,7 +121,7 @@ end
 function getwetness(sysfinal)
     wetness = Float64[]
     for sysfinali in sysfinal
-        Lvaporplug = XptoLvaporplug(sysfinali.liquid.Xp,sysfinali.tube.L,sysfinali.tube.closedornot)
+        Lvaporplug = ξ_to_vapor_length(first.(sysfinali.liquid.Xp), last.(sysfinali.liquid.Xp),sysfinali.tube.L,sysfinali.tube.closedornot)
         Lvaporsum = sum(Lvaporplug)
         Ldryvapor = Lvaporplug - sysfinali.vapor.Lfilm_start  - sysfinali.vapor.Lfilm_end
         Ldrysum = sum(Ldryvapor)

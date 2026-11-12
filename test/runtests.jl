@@ -52,6 +52,7 @@ if GROUP == "All" || GROUP == "Auxiliary"
     include("tube_geometry.jl")
     include("inner_coordinates.jl")
     include("liquid_lengths.jl")
+    include("volumes.jl")
     include("film_geometry.jl")
     include("film_interfaces.jl")
     include("initialization.jl")

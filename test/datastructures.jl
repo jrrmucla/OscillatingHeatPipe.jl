@@ -28,7 +28,7 @@ using OscillatingHeatPipe
         vapor_length = mod.(map(u -> u[2],Xvapor) - map(u -> u[1],Xvapor),L)
         @test all(vapor_length .> 0)
     
-        @test vapor_length == XptoLvaporplug(ξ_LR,L,closedornot)
+        @test vapor_length == ξ_to_vapor_length(ξ_L, ξ_R,L,closedornot)
 
         # continuity test
         @test sum(vapor_length) + sum(liquid_length) ≈ L
@@ -150,7 +150,7 @@ end
     ρₗ = sys_tube.liquid.ρₗ
     closedornot = sys_tube.tube.closedornot
 
-    Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
+    Lvaporplug = ξ_to_vapor_length(first.(Xp), last.(Xp),L,closedornot)
     Lliquidslug = ξ_to_liquid_length(first.(Xp), last.(Xp), L)
 
     ρv = sys_tube.propconvert.PtoD.(sys_tube.vapor.P)

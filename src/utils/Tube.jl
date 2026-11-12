@@ -60,6 +60,9 @@ function VariableTube(ξknots, diameters, perimeters, areas, g, closedornot, N)
                         diameter_map, perimeter_map, area_map, forward, inverse)
 end
 
+_tube_volume(tube::UniformTube) = tube.Ac * tube.L
+_tube_volume(tube::VariableTube) = map_ξ_to_ζ(tube, last(tube.ξ_geometric_knots))
+
 _tube_length(tube::UniformTube) = tube.L
 _tube_length(tube::VariableTube) = last(tube.ξ_geometric_knots)
 

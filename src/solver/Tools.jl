@@ -1,5 +1,5 @@
 export getgvec,getgh,delta, # get actrual heightg of the tube
-XptoLvaporplug,ξ_to_liquid_length,getXpvapor, # transfer Xp to the length of vapors, length of liquids, and Xp for vapor.
+ξ_to_vapor_length,ξ_to_liquid_length,ζ_to_vapor_volume,ζ_to_liquid_volume,getXpvapor, # transfer Xp to the length of vapors, length of liquids, and Xp for vapor.
 # ifamong,constructXarrays,
 Hfilm,getδarea,getδFromδarea,getMvapor,getMfilm,getMliquid,getMtotal,getchargeratio,getVolumevapor,
 getCa,f_churchill,Catoδ,RntoΔT,systoM
@@ -16,46 +16,26 @@ end
 delta(n) = n != 0
 
 """
-    XptoLvaporplug(Xp,L,closedornot) -> Vector{Float64}
+    ξ_to_vapor_length(ξ_L, ξ_R, L, closedornot)
 
-This function uses the set of coordinates `Xp` of every liquid/vapor interface,
-and length `L` of the tube to form an array of vapor lengths.
+Return vapor plug lengths from interface ξ-locations.
+- closed tubes: plug `i` lies between slugs `i-1` and `i`
+- open tubes: plug `i` lies between slugs `i` and `i+1`
 """
-function XptoLvaporplug(Xp::Vector{Tuple{Float64, Float64}},L::Float64,closedornot::Bool)
-
-    if closedornot == false
-        maxindex = length(Xp) - 1
-        Lvaporplug = zeros(maxindex)
-
-        if maxindex > 0
-            for i = 1:maxindex
-                Lvaporplug[i] = Xp[i+1][1] - Xp[i][end]
-            end
-        else
-            return error("need more than one liquid slugs")
-        end
+function ξ_to_vapor_length(ξ_L::AbstractVector{<:Real}, ξ_R::AbstractVector{<:Real}, L::Real, closedornot::Bool)
+    length(ξ_L) == length(ξ_R) ||
+        throw(DimensionMismatch("Left and right interface counts must match"))
+    if closedornot
+        isempty(ξ_L) && throw(ArgumentError("A closed tube requires at least one liquid slug"))
+        return mod.(ξ_L - circshift(ξ_R, 1), L)
     end
-
-    if closedornot == true
-        maxindex = length(Xp)
-        Lvaporplug = zeros(maxindex)
-
-        Lvaporplug[1] = mod((Xp[1][1]-Xp[end][end]),L)
-        for i = 2:maxindex
-            Lvaporplug[i] = mod((Xp[i][1] - Xp[i-1][end]),L)
-        end
-    end
-        
-    return Lvaporplug
+    length(ξ_L) > 1 || throw(ArgumentError("An open tube requires at least two liquid slugs"))
+    return ξ_L[2:end] - ξ_R[1:end-1]
 end
-
 """
     ξ_to_liquid_length(ξ_L, ξ_R, L)
 
-Return liquid slug lengths `mod(ξ_R - ξ_L, L)`, accounting for interfaces
-crossing the periodic boundary of a tube of length `L`. Accept either scalar
-coordinates or equally sized vectors of left and right coordinates.
-Coincident endpoints (including a difference of exactly `L`) return zero.
+Return liquid slug lengths from interface ξ-locations.
 """
 function ξ_to_liquid_length(ξ_L::Real, ξ_R::Real, L::Real)
     return mod(ξ_R - ξ_L, L)
@@ -64,6 +44,27 @@ end
 function ξ_to_liquid_length(ξ_L::AbstractVector{<:Real}, ξ_R::AbstractVector{<:Real}, L::Real)
     return mod.(ξ_R - ξ_L, L)
 end
+
+"""
+    ζ_to_liquid_volume(ζ_L, ζ_R, V)
+
+Return liquid slug volumes from interface ζ-locations.
+"""
+ζ_to_liquid_volume(ζ_L::Real, ζ_R::Real, V::Real) = ξ_to_liquid_length(ζ_L, ζ_R, V)
+ζ_to_liquid_volume(ζ_L::AbstractVector{<:Real}, ζ_R::AbstractVector{<:Real}, V::Real) =
+    ξ_to_liquid_length(ζ_L, ζ_R, V)
+
+"""
+    ζ_to_vapor_volume(ζ_L, ζ_R, V, closedornot)
+
+Return vapor plug volumes from interface ζ-locations.
+- closed tubes: plug `i` lies between slugs `i-1` and `i`
+- open tubes: plug `i` lies between slugs `i` and `i+1`
+These volumes include the liquid films.
+"""
+ζ_to_vapor_volume(ζ_L::AbstractVector{<:Real}, ζ_R::AbstractVector{<:Real}, V::Real, closedornot::Bool) =
+    ξ_to_vapor_length(ζ_L, ζ_R, V, closedornot)
+
 """
     getXpvapor(Xp::Vector{Tuple},closedornot) -> Vector{Tuple}
 
@@ -268,9 +269,8 @@ Return the chargeratio considering all of the vapor,liquid, and film regions
 """
 function getchargeratio(sys)
     Mtotal = getMtotal(sys)
-    @unpack L,Ac = sys.tube # get the tube parameters
     @unpack ρₗ = sys.liquid # get the liquid density
-    Vtotal = L * Ac # total volume of the tube
+    Vtotal = _tube_volume(sys.tube)
     Mliquidfull = ρₗ * Vtotal # mass of the tube if it is full of liquid
     return Mtotal / Mliquidfull
 end
@@ -314,22 +314,14 @@ Return the volumes of the vapor regions, given the tube system `sys`.
 """
 function getVolumevapor(sys)
     @unpack tube, vapor, liquid = sys
-    L = _tube_length(tube)
-    closedornot = tube.closedornot
     @unpack Af_L, Af_R, Lfilm_start, Lfilm_end = vapor
-    @unpack Xp = liquid
-    
-    Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
-    
-    interfaces = getXpvapor(Xp, closedornot)
-    tube_volumes = _tube_region_volume.(Ref(tube), first.(interfaces), Lvaporplug)
-    return tube_volumes .- Af_L .* Lfilm_start .- Af_R .* Lfilm_end
-
+    @unpack ζ_L, ζ_R = liquid
+    plug_volumes = ζ_to_vapor_volume(ζ_L, ζ_R, _tube_volume(tube), tube.closedornot)
+    return plug_volumes .- Af_L .* Lfilm_start .- Af_R .* Lfilm_end
 end
 
 
-_getVolumevapor(Ac,Af_L,Af_R,Lvaporplug,Lfilm_start,Lfilm_end) = 
-                        Ac * Lvaporplug - Af_L * Lfilm_start - Af_R * Lfilm_end
+
 
 
 
@@ -353,12 +345,9 @@ Return the masses of all of the liquid slugs in the system.
 """
 function getMliquid(sys)
     @unpack tube, liquid = sys
-    L = _tube_length(tube)
-    @unpack ρₗ, Xp = liquid
-
-    Lliquidslug = ξ_to_liquid_length(first.(Xp), last.(Xp), L)
-    return ρₗ .* _tube_region_volume.(Ref(tube), first.(Xp), Lliquidslug)
-
+    @unpack ρₗ, ζ_L, ζ_R = liquid
+    volumes = tube.closedornot ? ζ_to_liquid_volume(ζ_L, ζ_R, _tube_volume(tube)) : ζ_R - ζ_L
+    return ρₗ .* volumes
 end
 
 _tube_region_volume(tube::UniformTube, start, region_length) = tube.Ac * region_length
@@ -443,15 +432,5 @@ end
 Given tube system `sys`, return the masses of the vapor regions.
 """
 function systoM(sys0::UniformPhpSystem)
-
-    @unpack Ac,d,L,closedornot = sys0.tube
-    @unpack Xp = sys0.liquid
-    @unpack Af_L,Af_R,Lfilm_start,Lfilm_end,P = sys0.vapor
-    @unpack PtoD = sys0.propconvert
-
-    Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
-
-    volume_vapor = Lvaporplug .* Ac .- Lfilm_start .* Af_L .- Lfilm_end .* Af_R
-
-    M = PtoD.(P) .* volume_vapor
+    return getMvapor(sys0)
 end

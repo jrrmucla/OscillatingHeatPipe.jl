@@ -112,7 +112,7 @@ function getcurrentsys_nowall!(u,sys0)
     ζ_L,ζ_R,Q_B,M,Af_L,Af_R,Lfilm_start,Lfilm_end = u_to_ζMAL(u[1:indexes[1]-1])
 
     if sys0.tube.closedornot == true 
-        tube_volume = map_ξ_to_ζ(sys0.tube, sys0.tube.L)
+        tube_volume = _tube_volume(sys0.tube)
         ζ_L .= mod.(ζ_L, tube_volume)
         ζ_R .= mod.(ζ_R, tube_volume)
     end
@@ -124,22 +124,7 @@ function getcurrentsys_nowall!(u,sys0)
     ξ_L = map_ζ_to_ξ(sys0.tube, ζ_L)
     ξ_R = map_ζ_to_ξ(sys0.tube, ζ_R)
     Xp = collect(zip(ξ_L, ξ_R))
-    Lvaporplug = XptoLvaporplug(Xp,sys0.tube.L,sys0.tube.closedornot)
 
-    Ac = sys0.tube.Ac
-
-    d = sys0.tube.Dh
-
-    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Af_L - Lfilm_end .* Af_R
-    ρ = M ./ volume_vapor
-
-    # println(Lvaporplug)
-    # println(Lfilm_start)
-    # println(Lfilm_end)
-
-    @unpack DtoP = sys0.propconvert
-    P = DtoP.(ρ)
-  
     sysnew = sys0
 
     sysnew.liquid.ζ_L = ζ_L
@@ -148,11 +133,15 @@ function getcurrentsys_nowall!(u,sys0)
     sysnew.liquid.θarrays = θliquidrec
     sysnew.liquid.ξarrays = updateXarrays(Xp,sysnew.liquid.θarrays,sysnew.tube.L)
 
-    sysnew.vapor.P = P
     sysnew.vapor.Af_L = Af_L
     sysnew.vapor.Af_R = Af_R
     sysnew.vapor.Lfilm_start = Lfilm_start
     sysnew.vapor.Lfilm_end = Lfilm_end
+
+    volume_vapor = getVolumevapor(sysnew)
+    ρ = M ./ volume_vapor
+    @unpack DtoP = sysnew.propconvert
+    sysnew.vapor.P = DtoP.(ρ)
 
     sysnew.mapping = refresh_interpolations(sysnew)
 

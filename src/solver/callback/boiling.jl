@@ -127,7 +127,7 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
     Mold = sysnew.cache.mass
     L_adjust = (Mvapor_new + Mfilm_new + Mliquid_new - Mold)./ (ρₗ*Ac) .* (1 +  ρinsert/ρₗ)
 
-    Lvaporplug = XptoLvaporplug(sysnew.liquid.Xp,sysnew.tube.L,sysnew.tube.closedornot)
+    Lvaporplug = ξ_to_vapor_length(first.(sysnew.liquid.Xp), last.(sysnew.liquid.Xp),sysnew.tube.L,sysnew.tube.closedornot)
     Lpurevapor = Lvaporplug .- Lfilm_start_new .- Lfilm_end_new
     Lliquidslug = ξ_to_liquid_length(first.(Xpnew), last.(Xpnew), sys.tube.L)
 
@@ -404,28 +404,9 @@ function suitable_for_boiling(p,i)
 end
 
 function get_vapor_energy(sys0::UniformPhpSystem)
-    Ac = sys0.tube.Ac
-    d = sys0.tube.Dh
-
-    X0 = sys0.liquid.Xp
-    dXdt0 = sys0.liquid.dXdt
-
-    Af_L = sys0.vapor.Af_L
-    Af_R = sys0.vapor.Af_R
-    Lfilm_start = sys0.vapor.Lfilm_start
-    Lfilm_end = sys0.vapor.Lfilm_end
-    P = sys0.vapor.P
-    Lvaporplug = XptoLvaporplug(X0,sys0.tube.L,sys0.tube.closedornot)
-
-    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Af_L - Lfilm_end .* Af_R
-
-    PtoD = sys0.propconvert.PtoD
+    volume_vapor = getVolumevapor(sys0)
     PtoT = sys0.propconvert.PtoT
-
-    M = PtoD.(P) .* volume_vapor
-    
-    U =  PtoT.(P) .* sys0.liquid.Cpₗ .* volume_vapor
-    sum(U)
+    return sum(PtoT.(sys0.vapor.P) .* sys0.liquid.Cpₗ .* volume_vapor)
 end
 
 function get_liquid_energy(sys0::UniformPhpSystem)

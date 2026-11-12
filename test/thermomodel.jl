@@ -393,7 +393,7 @@ end
         Lfilm_start = sys_tube.vapor.Lfilm_start
         Lfilm_end = sys_tube.vapor.Lfilm_end
 
-        Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
+        Lvaporplug = ξ_to_vapor_length(first.(Xp), last.(Xp),L,closedornot)
 
         # set up five different film states
         V = [mean(elem) for elem in sys_tube.liquid.dXdt]
@@ -647,25 +647,25 @@ end
         elseif casei == 2
             sys_tube.liquid.dXdt[1:numofslugs] = [zero.(X) .- 1 for X in sys_tube.liquid.dXdt[1:numofslugs]]# initial velocity of the slugs
             sys_tube.vapor.P .= fill(sys_tube.propconvert.TtoP(Tref - 5.0),numofslugs)
-            Lvaporplug = XptoLvaporplug(sys_tube.liquid.Xp,sys_tube.tube.L,sys_tube.tube.closedornot)
+            Lvaporplug = ξ_to_vapor_length(first.(sys_tube.liquid.Xp), last.(sys_tube.liquid.Xp),sys_tube.tube.L,sys_tube.tube.closedornot)
             sys_tube.vapor.Lfilm_start .= Lvaporplug ./ 2
             sys_tube.vapor.Lfilm_end .= 1e-1 * sys_tube.wall.L_newbubble
         elseif casei == 3
             sys_tube.liquid.dXdt[1:numofslugs] = [zero.(X) .- 1 for X in sys_tube.liquid.dXdt[1:numofslugs]]# initial velocity of the slugs
             sys_tube.vapor.P .= fill(sys_tube.propconvert.TtoP(Tref + 5.0),numofslugs)
-            Lvaporplug = XptoLvaporplug(sys_tube.liquid.Xp,sys_tube.tube.L,sys_tube.tube.closedornot)
+            Lvaporplug = ξ_to_vapor_length(first.(sys_tube.liquid.Xp), last.(sys_tube.liquid.Xp),sys_tube.tube.L,sys_tube.tube.closedornot)
             sys_tube.vapor.Lfilm_start .= Lvaporplug ./ 2 .- 1e-1 * sys_tube.wall.L_newbubble
             sys_tube.vapor.Lfilm_end .= Lvaporplug ./ 2 .- 1e-1 * sys_tube.wall.L_newbubble
         elseif casei == 4
             sys_tube.liquid.dXdt[1:numofslugs] = [zero.(X) .- 1 for X in sys_tube.liquid.dXdt[1:numofslugs]]# initial velocity of the slugs
             sys_tube.vapor.P .= fill(sys_tube.propconvert.TtoP(Tref + 5.0),numofslugs)
-            Lvaporplug = XptoLvaporplug(sys_tube.liquid.Xp,sys_tube.tube.L,sys_tube.tube.closedornot)
+            Lvaporplug = ξ_to_vapor_length(first.(sys_tube.liquid.Xp), last.(sys_tube.liquid.Xp),sys_tube.tube.L,sys_tube.tube.closedornot)
             sys_tube.vapor.Lfilm_start .= Lvaporplug .- 2e-1 * sys_tube.wall.L_newbubble
             sys_tube.vapor.Lfilm_end .= 1e-1 * sys_tube.wall.L_newbubble
         elseif casei == 5
             sys_tube.liquid.dXdt[1:numofslugs] = [zero.(X) .+ 1 for X in sys_tube.liquid.dXdt[1:numofslugs]]# initial velocity of the slugs
             sys_tube.vapor.P .= fill(sys_tube.propconvert.TtoP(Tref + 5.0),numofslugs)
-            Lvaporplug = XptoLvaporplug(sys_tube.liquid.Xp,sys_tube.tube.L,sys_tube.tube.closedornot)
+            Lvaporplug = ξ_to_vapor_length(first.(sys_tube.liquid.Xp), last.(sys_tube.liquid.Xp),sys_tube.tube.L,sys_tube.tube.closedornot)
             sys_tube.vapor.Lfilm_start .= 1e-1 * sys_tube.wall.L_newbubble
             sys_tube.vapor.Lfilm_end .= Lvaporplug .- 2e-1 * sys_tube.wall.L_newbubble
         end

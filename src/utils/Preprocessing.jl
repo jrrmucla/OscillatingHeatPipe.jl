@@ -160,7 +160,9 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     Hₗ = p_fluid.kₗ/d * Nu # Nusselt number given
 
     ζ0_L,ζ0_R,Q0_B,liquid_realratio = randomζ(tube,numofslugs=slugnum,chargeratio=ch_ratio,σ_charge=σcharge) # chargeratio here is nominal volume fraction for liquid slugs only, it is slightly different from actual volume fraction.
-    ξ0 = collect(zip(map_ζ_to_ξ(tube, ζ0_L), map_ζ_to_ξ(tube, ζ0_R)))
+    ξ0_L = map_ζ_to_ξ(tube, ζ0_L)
+    ξ0_R = map_ζ_to_ξ(tube, ζ0_R)
+    ξ0 = collect(zip(ξ0_L, ξ0_R))
     Xarrays,θarrays = constructXarrays(ξ0,N,Tref,L)
     
     liquids=Liquid(Hₗ,ρₗ,Cpₗ,αₗ,μₗ,σ,ζ0_L,ζ0_R,Q0_B,Xarrays,θarrays)
@@ -168,7 +170,7 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     # Vapor
     @unpack TtoP = propconvert
 
-    Lvaporplug = XptoLvaporplug(ξ0,L,tube.closedornot)
+    Lvaporplug = ξ_to_vapor_length(ξ0_L, ξ0_R,L,tube.closedornot)
     P_initial = zero(Lvaporplug) .+ TtoP(Tref)
     Xpvapor = getXpvapor(ξ0, tube.closedornot)
     Af_L_initial, Af_R_initial = _initial_film_areas(tube, Xpvapor, δfilm_relative)

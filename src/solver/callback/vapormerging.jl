@@ -5,7 +5,6 @@ function vaporMergingAffect!(integrator)
     p = deepcopy(getcurrentsys_nowall!(integrator.u,integrator.p));
     δv = DEFAULT_VAPOR_MERGE_FRAC*p.wall.L_newbubble
 
-    L = p.tube.L;
 
     merge_flags = getVaporMergeFlags(δv,p)
     indexmergingsite = sort(findall(x->x == true, merge_flags),rev = true)
@@ -14,17 +13,13 @@ function vaporMergingAffect!(integrator)
         p = vaporMerging(p,i)
     end
 
-    Lvaporplug = XptoLvaporplug(p.liquid.Xp,p.tube.L,p.tube.closedornot)
-    # M = nondi_PtoD.(p.vapor.P) .* Lvaporplug
 
-    Ac = p.tube.Ac
-    d = p.tube.Dh
     Af_L = p.vapor.Af_L
     Af_R = p.vapor.Af_R
     Lfilm_start = p.vapor.Lfilm_start
     Lfilm_end = p.vapor.Lfilm_end
 
-    volume_vapor = Lvaporplug .* Ac - Lfilm_start .* Af_L - Lfilm_end .* Af_R
+    volume_vapor = getVolumevapor(p)
     @unpack PtoD = p.propconvert
     M = PtoD.(p.vapor.P) .* volume_vapor
 
@@ -59,7 +54,7 @@ function vaporMerging(p,i)
 
     # get the liquid interface velocities and lengthes for merging
     Lliquidslug_old = ξ_to_liquid_length(first.(p.liquid.Xp), last.(p.liquid.Xp), p.tube.L)
-    Lvaporplug =  XptoLvaporplug(p.liquid.Xp,p.tube.L,p.tube.closedornot)
+    Lvaporplug =  ξ_to_vapor_length(first.(p.liquid.Xp), last.(p.liquid.Xp),p.tube.L,p.tube.closedornot)
 
 
 # get compensated L of merged liquid slug for mass conservation
