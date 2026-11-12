@@ -142,9 +142,13 @@ end
 """
 function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
     # 1st derivative of state vector w.r.t. time
-    # new state vector
-    # [ζ_L (N entries), ζ_R (N entries), Q_B (N entires), ]
+    
+    # u = [ζ_L (N entries), ζ_R (N entries), Q_B (N entires), ]
+    #      m^3              m^3              m^3/s            
+    
     du = zeros(size(u))
+    # du/dt = [Q_L (N entries), Q_R (N entires), dQᵦdt (N entries), ]
+    #          m^3/s            m^3/s            m^3/s^2
 
     # extracts essential information stored at sys::UniformPhpSystem
     sys :: UniformPhpSystem = php_sys
@@ -155,9 +159,13 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
 
     liquid_ξ_left = map_ζ_to_ξ.(Ref(sys.tube), ζ_L)
     liquid_ξ_right = map_ζ_to_ξ.(Ref(sys.tube), ζ_R)
-    liquid_volume = ζ_R - ζ_L # add a pbc check
+    liquid_volume = ζ_R - ζ_L
     liquid_velocity = Q_B ./ Ac
-    liquid_length = liquid_ξ_right - liquid_ξ_left # add a pbc check
+    liquid_length = liquid_ξ_right - liquid_ξ_left
+    if closedornot
+        liquid_volume .= mod.(liquid_volume, Ac * L)
+        liquid_length .= mod.(liquid_length, L)
+    end
     liquid_interfaces = collect(zip(liquid_ξ_left, liquid_ξ_right))
 
     # number of liquid slugs
@@ -165,9 +173,7 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
 
     # Yuxuan 2024, equation (3)
     
-    Adeposit = Af_at_interfaces(sys)
-    Adeposit_left = [elem[1] for elem in Adeposit]
-    Adeposit_right = [elem[2] for elem in Adeposit]
+    Adeposit_left, Adeposit_right = Af_at_interfaces(sys, liquid_ξ_left, liquid_ξ_right, liquid_velocity)
 
 
     Lvaporplug = XptoLvaporplug(liquid_interfaces,L,closedornot)
