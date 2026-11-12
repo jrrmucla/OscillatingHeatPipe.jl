@@ -1,7 +1,7 @@
 export dMdtdynamicsmodel,dynamicsmodel_steadyfilm,wallmodel,liquidmodel,dynamicsmodel,sys_to_heatflux,sys_to_Harray,integrator_to_heatflux,integrator_to_Harray
 
-function _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
-    Ac, Lliquidslug, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
+function _open_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adeposit_left, Adeposit_right,
+    Ac, liquid_length, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
     Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
     Af_L, Af_R, rhs_dXdt, rhs_g, heightg, rhs_press, P)
 
@@ -11,7 +11,7 @@ function _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposi
     v_vapor_right_normal=zeros(numofvaporbubble)
 
     # get average velocities of the liquid slugs
-    v_momentum = @view u[2*numofliquidslug+1:2:4*numofliquidslug]
+    v_momentum = liquid_velocity
     v_momentum_vapor_end = v_momentum[2:end]
     v_momentum_vapor_start = v_momentum[1:end-1]
 
@@ -20,7 +20,7 @@ function _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposi
     v_liquid_left_normal  = v_momentum .+ v_momentum .* Adeposit_left ./ (Ac .- Adeposit_left)
     v_liquid_right_normal = v_momentum .+ v_momentum .* Adeposit_right ./(Ac .- Adeposit_right)
     
-    rhs_dLdt = -v_momentum .* (v_liquid_right_normal .- v_liquid_left_normal) ./ Lliquidslug
+    rhs_dLdt = -v_momentum .* (v_liquid_right_normal .- v_liquid_left_normal) ./ liquid_length
 
     # vapor δ
     v_vapor_left_normal = v_liquid_right_normal[1:end-1]
@@ -67,8 +67,8 @@ function _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposi
     return du
 end
 
-function _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
-    Ac, Lliquidslug, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
+function _closed_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adeposit_left, Adeposit_right,
+    Ac, liquid_length, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
     Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
     Af_L, Af_R, rhs_dXdt, rhs_g, heightg, rhs_press, P)
 
@@ -78,7 +78,7 @@ function _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adepo
     v_vapor_right_normal=zeros(numofvaporbubble)
 
     # get bulk velocities of the liquid slugs
-    v_liquid_bulk = @view u[2*numofliquidslug+1:2:4*numofliquidslug]
+    v_liquid_bulk = liquid_velocity
     v_momentum_vapor_end = v_liquid_bulk
     v_momentum_vapor_start = [v_liquid_bulk[end];v_liquid_bulk[1:end-1]]
 
@@ -88,7 +88,7 @@ function _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adepo
     v_liquid_right_interface = v_liquid_bulk .+ (v_liquid_bulk .* Adeposit_right ./(Ac .- Adeposit_right))
 
     # contraction or extension of the liquid slug from velocity mismatch
-    dLdt_liquid = -v_liquid_bulk .* (v_liquid_right_interface .- v_liquid_left_interface) ./ Lliquidslug
+    dLdt_liquid = -v_liquid_bulk .* (v_liquid_right_interface .- v_liquid_left_interface) ./ liquid_length
 
     # vapor δ
     v_vapor_left_normal[2:end] = @view v_liquid_right_interface[1:end-1]
@@ -141,18 +141,27 @@ end
     This equation takes the current state vector (u) and returns du/dt
 """
 function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
-    
+    # 1st derivative of state vector w.r.t. time
+    # new state vector
+    # [ζ_L (N entries), ζ_R (N entries), Q_B (N entires), ]
     du = zeros(size(u))
 
     # extracts essential information stored at sys::UniformPhpSystem
     sys :: UniformPhpSystem = php_sys
-    @unpack d,peri,Ac,g,L,closedornot = sys.tube
-    @unpack σ,μₗ,ρₗ,Xp,dXdt = sys.liquid
+    @unpack Dh,Pc,Ac,g,L,closedornot = sys.tube
+    @unpack σ,μₗ,ρₗ,ζ_L,ζ_R,Q_B = sys.liquid
     @unpack P,Eratio_plus,Eratio_minus,Af_L,Af_R,Lfilm_start,Lfilm_end,ad_fac = sys.vapor
     @unpack L_newbubble = sys.wall
 
+    liquid_ξ_left = map_ζ_to_ξ.(Ref(sys.tube), ζ_L)
+    liquid_ξ_right = map_ζ_to_ξ.(Ref(sys.tube), ζ_R)
+    liquid_volume = ζ_R - ζ_L # add a pbc check
+    liquid_velocity = Q_B ./ Ac
+    liquid_length = liquid_ξ_right - liquid_ξ_left # add a pbc check
+    liquid_interfaces = collect(zip(liquid_ξ_left, liquid_ξ_right))
+
     # number of liquid slugs
-    numofliquidslug = length(Xp)
+    numofliquidslug = length(Q_B)
 
     # Yuxuan 2024, equation (3)
     
@@ -161,26 +170,24 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
     Adeposit_right = [elem[2] for elem in Adeposit]
 
 
-    Lvaporplug = XptoLvaporplug(Xp,L,closedornot)
-    Lliquidslug = XptoLliquidslug(Xp,L)
+    Lvaporplug = XptoLvaporplug(liquid_interfaces,L,closedornot)
 
     # get gravity potential
     heightg_interp = sys.mapping.heightg_interp
-    Xp1 = [elem[1] for elem in Xp]
-    Xp2 = [elem[2] for elem in Xp]
+    Xp1 = liquid_ξ_left
+    Xp2 = liquid_ξ_right
     heightg = map(tuple,heightg_interp(Xp1),heightg_interp(Xp2))
 
-    Xpvapor = getXpvapor(Xp,closedornot)
+    Xpvapor = getXpvapor(liquid_interfaces,closedornot)
 
     # get differential equation factors
     curv_interp = sys.mapping.curv_interp_walltoliquid
-    lhs = ρₗ*Ac .* Lliquidslug
+    lhs = ρₗ .* liquid_volume
     rhs_press = Ac ./ lhs
-    V = [mean(elem) for elem in dXdt]
-    Re_list = ρₗ .* abs.(V) .* d ./ μₗ
+    Re_list = ρₗ .* abs.(liquid_velocity) .* Dh ./ μₗ
     friction_coefficient = f_churchill.(Re_list .+ 1e-4)
-    dXdt_to_stress = -0.125 .* friction_coefficient .* ρₗ .* V .* abs.(V)
-    rhs_dXdt = peri .* Lliquidslug .* dXdt_to_stress ./ lhs
+    dXdt_to_stress = -0.125 .* friction_coefficient .* ρₗ .* liquid_velocity .* abs.(liquid_velocity)
+    rhs_dXdt = Pc .* liquid_length .* dXdt_to_stress ./ lhs
     rhs_g = Ac*ρₗ ./ lhs
 
     # parameters for boolean flags
@@ -188,15 +195,15 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
     L0threshold_pure_vapor = DEFAULT_L0_PURE_VAPOR_FRAC*L_newbubble
 
     if closedornot == false
-        return _open_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
-            Ac, Lliquidslug, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
+        return _open_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adeposit_left, Adeposit_right,
+            Ac, liquid_length, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
             Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
             Af_L, Af_R, rhs_dXdt, rhs_g, heightg, rhs_press, P)
     end
 
     if closedornot == true
-        return _closed_tube_dynamics(du, u, sys, numofliquidslug, Adeposit_left, Adeposit_right,
-            Ac, Lliquidslug, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
+        return _closed_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adeposit_left, Adeposit_right,
+            Ac, liquid_length, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
             Lvaporplug, Lfilm_start, Lfilm_end, L0threshold_film, L0threshold_pure_vapor,
             Af_L, Af_R, rhs_dXdt, rhs_g, heightg, rhs_press, P)
     end
@@ -326,7 +333,7 @@ function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::Uniform
 
     P = sys.vapor.P
     θarrays = sys.liquid.θarrays
-    Xarrays = sys.liquid.Xarrays
+    ξarrays = sys.liquid.ξarrays
 
     @unpack PtoT,PtoHfg = sys.propconvert
     θ = PtoT.(P)
@@ -356,8 +363,8 @@ function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::Uniform
         heatflux_end = quad_trap(H_interp,θ_wall_interp,θ[i],mod(Xpvapor[i][2]-Lfilm_end[i],L),Xpvapor[i][2],L,Nend)
         heatflux_end_positive = quad_trap_positive(H_interp,θ_wall_interp,θ[i],mod(Xpvapor[i][2]-Lfilm_end[i],L),Xpvapor[i][2],L,Nend)
 
-        slope_r = getslope(θarrays[i][2],θarrays[i][1],Xarrays[i][2],Xarrays[i][1])
-        slope_l = (i == 1) ? getslope(θarrays[1][end],θarrays[1][end-1],Xarrays[1][end],Xarrays[1][end-1]) : getslope(θarrays[i-1][end],θarrays[i-1][end-1],Xarrays[i-1][end],Xarrays[i-1][end-1])
+        slope_r = getslope(θarrays[i][2],θarrays[i][1],ξarrays[i][2],ξarrays[i][1])
+        slope_l = (i == 1) ? getslope(θarrays[1][end],θarrays[1][end-1],ξarrays[1][end],ξarrays[1][end-1]) : getslope(θarrays[i-1][end],θarrays[i-1][end-1],ξarrays[i-1][end],ξarrays[i-1][end-1])
 
 
         axial_rhs_end = Ac*k*slope_r /Hfg[i]
@@ -384,17 +391,17 @@ end
     Reference: (9) Yuxuan 2024
 """
 function liquidmodel(p::UniformPhpSystem)
-    @unpack θarrays,Xarrays,Hₗ,αₗ,Cpₗ,ρₗ = p.liquid
-    @unpack Ac,L,peri = p.tube
+    @unpack θarrays,ξarrays,Hₗ,αₗ,Cpₗ,ρₗ = p.liquid
+    @unpack Ac,L,Pc = p.tube
     @unpack θ_interp_walltoliquid = p.mapping
 
     du = 0 .* θarrays
 
-    H_rhs = peri / (ρₗ*Cpₗ*Ac)
+    H_rhs = Pc / (ρₗ*Cpₗ*Ac)
 
     for i in eachindex(θarrays)
         
-        xs = Xarrays[i];
+        xs = ξarrays[i];
         dx = mod(xs[end] - xs[1], L) / (length(xs)-1) ## two nodes are at the boundary so need to minus 1 for distance
 
         fx = map(θ_interp_walltoliquid, xs) - θarrays[i]
@@ -432,13 +439,13 @@ end
 # q'
 function sys_to_heatflux(p::UniformPhpSystem)
     @unpack θarray,Xarray = p.wall
-    @unpack peri = p.tube
+    @unpack Pc = p.tube
     @unpack θ_interp_liquidtowall,H_interp_liquidtowall = p.mapping
 
     dθarray = map(θ_interp_liquidtowall, Xarray) .- θarray
     Harray  = map(H_interp_liquidtowall, Xarray)
 
-    return -Harray.*dθarray*peri
+    return -Harray.*dθarray*Pc
 end
 
 function integrator_to_heatflux(inte)
