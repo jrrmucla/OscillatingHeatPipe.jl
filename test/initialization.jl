@@ -14,6 +14,10 @@ Test: It should succeed if the tube object is consistent with the ILM problem's 
 and fail otherwise.
 """
 
+# collection of checks to make sure
+# initialize_ohpsys behaves as we expect
+# this function has a lot of optional params, 
+# so specific tests should be added to cover those as well...
 @testset "Supplied tube initialization" begin
     ohp_module = OscillatingHeatPipe
     fluid = SaturationFluidProperty("Butane", 291.2)
@@ -24,6 +28,7 @@ and fail otherwise.
     line_flux!(flux, temperature, time, cache, parameters) = fill!(flux, 0.0)
 
     for closed in (false, true)
+        # this method is the proper way to initialize an OHP geometry
         x, y, xf, yf, tube = construct_alternating_ohp_curve(
             2, 0.01, 0.1, 0.02, 0.001, -0.03, 0.06, false, false, 0.0,
             0.001, 0.004, 1e-6, 0.0012, 0.005, 1.5e-6; closedornot=closed)
@@ -46,7 +51,7 @@ and fail otherwise.
         supplied = initialize_ohpsys(substrate, fluid, 40.0; tube=supplied_uniform,
                                      slugnum=3, nucleatenum=2)
         @test supplied.tube === supplied_uniform
-        @test supplied.liquid.Hₗ ≈ fluid.kₗ / supplied_uniform.d * ohp_module.DEFAULT_NU
+        @test supplied.liquid.Hₗ ≈ fluid.kₗ / supplied_uniform.Dh * ohp_module.DEFAULT_NU
 
         variable = initialize_ohpsys(substrate, fluid, 40.0; tube, slugnum=3, nucleatenum=2)
         @test variable isa ohp_module.VariableAreaPhpSystem

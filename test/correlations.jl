@@ -4,23 +4,25 @@ using OscillatingHeatPipe
 # using ComputationalHeatTransfer
 
 # test Ca to δ correlation (Aussillous and Quere, 2000)
-@testset "liquid film thickness correlation" begin
+@testset "Catoδ()" begin
     Ns = 30
     d = 1e-3
     δmin = 2e-6
     δmax = 1e-4
     Ca = rand(Ns) .* 0.05
+
+    # verify `Catoδ` follows this particular calculation for δ
     δ = 1.34 * (Ca .^ (2/3)) ./ (1 .+ 3.35 .* (Ca .^ (2/3))) .* d/2
     δ_clamp = clamp.(δ,δmin,δmax)
-
     @test all(δ_clamp .≈ Catoδ.([d],Ca,δmin=δmin,δmax=δmax))
 
+    # verify `ad_fac` scales thickness linearly when 
+    # passed as a parameter into `Catoδ`
     ad_fac = 1 + 0.3 * rand()
-
     δ_clamp_adfac = clamp.(δ .* ad_fac,δmin,δmax)
     @test all(δ_clamp_adfac .≈ Catoδ.([d],Ca,adjust_factor=ad_fac,δmin=δmin,δmax=δmax))
 
-    # A single vector call must clamp each diameter independently.
+    # verify that each thickness is clamped independently
     diameters = [1e-8, 1e-3, 1.0]
     expected = Catoδ.(diameters, 0.01; adjust_factor=1.2)
     @test Catoδ(diameters, 0.01; adjust_factor=1.2) ≈ expected
@@ -32,27 +34,27 @@ using OscillatingHeatPipe
 end
 
 # test Churchill friction factor correlation (Churchill, 1977) 
-@testset "churchill friction factor" begin
+@testset "f_churchill()" begin
     Ns = 30
     ϵ = 0.001 # relative roughness
+
+    # verify that the correlation follows stokes drag in low Re
     Re_laminar = rand(Ns)*200
     f_ch = f_churchill.(Re_laminar,[ϵ])
-
     @test all(isapprox.(f_ch, 64 ./ Re_laminar,atol=1e-12,rtol=1e-4))
 
+    # verify `fchurchill` follows this particular calculation
+    # which is the equation from Churchill 1977
     Re_turbulent = rand(Ns) .* 1e6 .+ 4000
     f_ch = f_churchill.(Re_turbulent,[ϵ])
-
     A = (-2.457 .* log.((7 ./ Re_turbulent) .^0.9 .+ 0.27 .* ϵ)) .^16
     B = (37530 ./ Re_turbulent) .^16
     f_ch_analytical = 8*((8 ./ Re_turbulent) .^12 .+ (1 ./ ((A .+ B) .^1.5))) .^ (1/12)
-
     @test all(isapprox.(f_ch,f_ch_analytical,atol=1e-12,rtol=1e-12))
-
 end
 
 # test boiling ΔT correlation (Qu and Ma, 2007)
-@testset "boiling ΔT" begin
+@testset "RntoΔT()" begin
     Rn = 3e-6 + rand()*1e-6
     Tref = 273.15 + rand()*50
     d = 1e-3 + rand()*1e-3
@@ -61,13 +63,13 @@ end
 
     ΔT = RntoΔT(Rn,Tref,fluid_type,d,TtoP)
 
-
+    # verify that `RntoΔT` roduces values
+    # consistent with this calculation
     p_fluid = SaturationFluidProperty(fluid_type,Tref)
     Rkg = p_fluid.R/p_fluid.M
     Rin = d/2
     P = TtoP(Tref)
     Hfg = p_fluid.hᵥ - p_fluid.hₗ
-
     y = Rkg .* Tref ./ Hfg .* log.(1 .+ 2 .* p_fluid.σ ./ P .* (1 ./ Rn - 1 ./ (2 .* (Rin - 0.0))))
     ΔT_analytical = Tref .* (1 ./ (1 .- y) - 1)
 

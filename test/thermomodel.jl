@@ -11,9 +11,7 @@ length_ohpchannel_mm = 141 # x range of the ohp in mm
 
 ρₛ = 2730; # material density [kg/m^3] Aluminum3003-O
 cₛ  = 8.93e02; # material specific heat [J/kg K]
-# kₛ  = 2.37e02; # material heat conductivity Aluminum6061
 kₛ  = 1.93e02; # material heat conductivity Aluminum3003-O
-
 
 αₛ = kₛ/ρₛ/cₛ
 
@@ -124,7 +122,6 @@ tr2_c = RigidTransform((-(3INCHES-7.5e-3),-0.0),0.0)
 cond1 = AreaForcingModel(fregion1_c,tr1_c,condensermodel!);
 cond2 = AreaForcingModel(fregion2_c,tr2_c,adiabaticmodel!);
 
-# x, y = construct_ohp_curve("ASETS",Δx) # get x and y coordinates for the channel
 ds = 1.5Δx
 nturn = 16
 width_ohp = 1.821*INCHES - tube_diameter
@@ -139,14 +136,11 @@ ohp = BasicBody(x,y) # build a BasicBody based on x,y
 
 tr_ohp = RigidTransform((0.0,0.0),0.0)
 
-# phys_params["ohp_flux"] = zero(x);
-
 function ohpmodel!(σ,T,t,fr::LineRegionCache,phys_params)
     σ .= phys_params["ohp_flux"] ./ phys_params["flux_correction"] 
 end
 ohp_linesource = LineForcingModel(ohp,tr_ohp,ohpmodel!);
 
-# forcing_dict = Dict("heating models" => [heater1,cond1,ohp_linesource])
 forcing_dict = Dict("heating models" => [heater1,cond1,cond2,ohp_linesource])
 
 tspan = (0.0, 300.0); # start time and end time
@@ -167,6 +161,7 @@ prob = NeumannHeatConductionProblem(g,body,scaling=GridScaling,
 
 sys_plate = construct_system(prob);
 
+# ensure energy and mass are conserved
 # test 1, 30 slugs, no heat transfer, given an initial velocity, with and without gravity
 @testset "dynamicsmodel test1" begin
     numofslugs = 30
@@ -174,12 +169,11 @@ sys_plate = construct_system(prob);
     for gi in [[0.0,0.0],[-9.8,0.0]]
   
         sys_tube = initialize_ohpsys(sys_plate,p_fluid,power,g=gi,slugnum=numofslugs,ηplus=rand())
-        Vint = 1.0 + rand()
-        sys_tube.liquid.dXdt = [zero.(X) .+ Vint for X in sys_tube.liquid.dXdt]# initial velocity of the slugs
+        initial_Q_B = 1.0E-6 + rand()
+        sys_tube.liquid.Q_B = [zero.(X) .+ initial_Q_B for X in sys_tube.liquid.Q_B] # initial velocity of the slugs
         sys_tube.vapor.Af_L .= sys_tube.tube.Pc .* (zeros(numofslugs) .+ 1e-5 ) # initial film area
 
         u_tube = newstate(sys_tube) # initialize OHP tube
-        # integrator_tube = init(u_tube,tspan,sys_tube); # construct integrator_tube
 
         σ = sys_tube.liquid.σ
         L = sys_tube.tube.L

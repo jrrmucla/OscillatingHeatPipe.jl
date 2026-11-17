@@ -320,11 +320,6 @@ function getVolumevapor(sys)
     return plug_volumes .- Af_L .* Lfilm_start .- Af_R .* Lfilm_end
 end
 
-
-
-
-
-
 """
     getMfilm(sys::UniformPhpSystem)
 

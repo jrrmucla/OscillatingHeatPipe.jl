@@ -41,20 +41,19 @@ function _open_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adeposit
     v_liquid_left_final = [0.0;vcat(v_vapor_end_final...)]
     v_liquid_right_final = [vcat(v_vapor_start_final...);0.0]
 
+    du[1                 : numofliquidslug  ] = Ac * v_liquid_left_final
+    du[numofliquidslug+1 : 2*numofliquidslug] = Ac * v_liquid_right_final
+
     # up tp here
     for i = 1:numofliquidslug
-        du[2*i-1] = v_liquid_left_final[i]
-        du[2*i] = v_liquid_right_final[i]
-
         if (i != 1) && (i != numofliquidslug)
             du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i-1]-P[i]) + rhs_dLdt[i]
         else
+            # the slugs at the start and end of the tubes have no bulk
+            # velocity (or volumetric flow rate)
             du[2*numofliquidslug + 2*i-1] = 0.0
         end                
-
-        du[2*numofliquidslug + 2*i] = du[2*numofliquidslug + 2*i-1]
     end
-
 
     du[4*numofliquidslug+1:4*numofliquidslug+numofvaporbubble] = dMdt_latent_start+dMdt_latent_end
     du[4*numofliquidslug+numofvaporbubble+1:4*numofliquidslug+2*numofvaporbubble] .= 0.0 # equals to 0 for now
@@ -114,24 +113,31 @@ function _closed_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adepos
 
     # this looks like an implementation of the liquid momentum equation (6)
     # needs update for new liquid / state vector to correct units
+
+    # dζ/dt, volumetric flow rate
+    # obtained by solving C
+    # [m3/s]
+    du[1                 : numofliquidslug  ] = Ac * v_liquid_left_final
+    du[numofliquidslug+1 : 2*numofliquidslug] = Ac * v_liquid_right_final
+
+    # dQ/dt
+    # obtained by solving ξ-mom
+    # [m3/s2]
     for i = 1:numofliquidslug
-        du[2*i-1] = v_liquid_left_final[i]
-        du[2*i] = v_liquid_right_final[i]
-
         if i != numofliquidslug
-            du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[i+1]) + dLdt_liquid[i]
+            du[2*numofliquidslug + i] = Ac * (rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[i+1]) + dLdt_liquid[i])
         else
-            du[2*numofliquidslug + 2*i-1] = rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[1]) + dLdt_liquid[i]
+            # last slug accounts for PBC
+            du[2*numofliquidslug + i] = Ac * (rhs_dXdt[i] + rhs_g[i]*(heightg[i][1]-heightg[i][end]) + rhs_press[i] * (P[i]-P[1]) + dLdt_liquid[i])
         end
-
-        du[2*numofliquidslug + 2*i] = du[2*numofliquidslug + 2*i-1]
     end
 
-    du[4*numofliquidslug+1:5*numofliquidslug] = dMdt_latent_start+dMdt_latent_end
-    du[5*numofliquidslug+1:6*numofliquidslug] = dAdt_start # equals to 0 for now
-    du[6*numofliquidslug+1:7*numofliquidslug] = dAdt_end # equals to 0 for now
-    du[7*numofliquidslug+1:8*numofliquidslug] = dLdt_start # equals to 0 for now
-    du[8*numofliquidslug+1:9*numofliquidslug] = dLdt_end # equals to 0 for now
+    # new state vector only changes indices
+    du[3*numofliquidslug+1:4*numofliquidslug] = dMdt_latent_start+dMdt_latent_end
+    du[4*numofliquidslug+1:5*numofliquidslug] = dAdt_start # equals to 0 for now
+    du[5*numofliquidslug+1:6*numofliquidslug] = dAdt_end # equals to 0 for now
+    du[6*numofliquidslug+1:7*numofliquidslug] = dLdt_start # equals to 0 for now
+    du[7*numofliquidslug+1:8*numofliquidslug] = dLdt_end # equals to 0 for now
 
     return du
 end

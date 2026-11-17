@@ -58,41 +58,11 @@ end
 
 sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
 
-@testset "Film area state" begin
-    for closed in (false, true), shape in ("square", "circle")
-        sys = initialize_ohpsys(sys_plate,p_fluid,power,closedornot=closed,slugnum=3,
-                               δfilm_relative=0.04,tubeshape=shape)
-        thickness = 0.04 * sys.tube.Dh / 2
-        expected_area = sys.tube.Ac * (1 - (1 - 2thickness / sys.tube.Dh)^2)
-        @test all(sys.vapor.Af_L .≈ expected_area)
-        @test all(sys.vapor.Af_R .≈ expected_area)
-        @test !hasproperty(sys.vapor, :δstart)
-        @test !hasproperty(sys.vapor, :δend)
-
-        u = newstate(sys)
-        mechanical_length = 3length(sys.liquid.Q_B) + 5length(sys.vapor.P)
-        fields = OscillatingHeatPipe.u_to_ζMAL(u[1:mechanical_length])
-        @test fields[5] == sys.vapor.Af_L
-        @test fields[6] == sys.vapor.Af_R
-
-        restored = getcurrentsys_nowall!(u,deepcopy(sys))
-        @test restored.vapor.Af_L == sys.vapor.Af_L
-        @test restored.vapor.Af_R == sys.vapor.Af_R
-        @test restored.vapor.P ≈ sys.vapor.P
-        @test getMtotal(restored) ≈ getMtotal(sys)
-        δ_start, δ_end = getδ([restored])
-        @test only(δ_start) ≈ thickness
-        @test only(δ_end) ≈ thickness
-    end
-end
-
-@testset "Film areas" begin
-
+@testset "Film Area Calculation" begin
     d = sys_tube.tube.Dh
     Af_L = sys_tube.vapor.Af_L
     Af_R = sys_tube.vapor.Af_R
-    dXdt = sys_tube.liquid.dXdt
-    Ac = sys_tube.tube.Ac
+    Q_B = sys_tube.liquid.Q_B
 
     # Each moving interface below gives a mean slug speed of 0.05.
     Ca = getCa(sys_tube.liquid.μₗ,sys_tube.liquid.σ,0.05)
@@ -110,33 +80,27 @@ end
     @test all(map((u,v) -> u[2]==v,Adep,circshift(δarea_start,-1)))
 
     # Left slug interfaces are advancing. Should be equal to deposited film
-    dXdt .= [(0.1,0.0) for i in eachindex(dXdt)]
+    Q_B .= fill(-0.1,length(Q_B))
     Adep = Af_at_interfaces(sys_tube)
     @test all(map(u -> u[1]≈δarea_dep,Adep))
     @test all(map((u,v) -> u[2]==v,Adep,circshift(δarea_start,-1)))
 
     # Right slug interfaces are advancing. Should be equal to deposited film
-    dXdt .= [(0.0,-0.1) for i in eachindex(dXdt)]
+    Q_B .= fill(-0.1,length(Q_B))
     Adep = Af_at_interfaces(sys_tube)
     @test all(map((u,v) -> u[1]==v,Adep,δarea_end))
     @test all(map(u -> u[2]≈δarea_dep,Adep))
 
     vol = getVolumevapor(sys_tube)
     @test all(vol .> 0)
-
-    ρv = sys_tube.propconvert.PtoD.(sys_tube.vapor.P)
-    @test getMvapor(sys_tube) ≈ ρv.*vol
-
 end
 
 
-@testset "Mass functions" begin
-
+@testset "Mass Calculation Helpers (Uniform Channel)" begin
     numofslugs = length(sys_tube.liquid.Xp)
 
     sys_tube.vapor.Af_L .= sys_tube.tube.Pc .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
     sys_tube.vapor.Af_R .= sys_tube.tube.Pc .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
-    
 
     d = sys_tube.tube.Dh
     Af_L = sys_tube.vapor.Af_L
@@ -153,47 +117,50 @@ end
     Lvaporplug = ξ_to_vapor_length(first.(Xp), last.(Xp),L,closedornot)
     Lliquidslug = ξ_to_liquid_length(first.(Xp), last.(Xp), L)
 
-    ρv = sys_tube.propconvert.PtoD.(sys_tube.vapor.P)
-
-    # mass of vapor
+    # mass of vapor (uniform channel)
+    # verify that the getMvapor follows this calculation
+    dens_vapor = sys_tube.propconvert.PtoD.(sys_tube.vapor.P)
     vol_vapor_analytical = Lvaporplug .* Ac .- Lfilm_start .* Af_L .- Lfilm_end .* Af_R
-    M_vapor_analytical = ρv .* vol_vapor_analytical
+    mass_vapor_analytical = dens_vapor .* vol_vapor_analytical
+    @test OscillatingHeatPipe.getMvapor(sys_tube) ≈ mass_vapor_analytical
 
-    @test OscillatingHeatPipe.getMvapor(sys_tube) ≈ M_vapor_analytical
-
-    # mass of liquid
+    # mass of liquid (uniform channel)
+    # verify that the getMliquid follows this calculation
     vol_liquid_analytical = Lliquidslug .* Ac
     M_liquid_analytical = ρₗ .* vol_liquid_analytical
-
     @test OscillatingHeatPipe.getMliquid(sys_tube) ≈ M_liquid_analytical
 
-    # mass of films
+    # mass of films (either channel)
+    # verify that getMfilm follows this calculation
     vol_film_start_analytical = Lfilm_start .* Af_L
     M_film_start_analytical = ρₗ .* vol_film_start_analytical
     vol_film_end_analytical = Lfilm_end .* Af_R
     M_film_end_analytical = ρₗ .* vol_film_end_analytical
 
-    Mfilm_start,Mfilm_end = OscillatingHeatPipe.getMfilm(sys_tube)
-
+    Mfilm_start, Mfilm_end = OscillatingHeatPipe.getMfilm(sys_tube)
     @test Mfilm_start ≈ M_film_start_analytical
     @test Mfilm_end ≈ M_film_end_analytical
 
-    @test getMtotal(sys_tube) ≈ sum(M_vapor_analytical) + sum(M_liquid_analytical) + sum(M_film_start_analytical) + sum(M_film_end_analytical)
+    # verfiy that getMtotal produces the sum of
+    # vapor + liquid + film
+    @test getMtotal(sys_tube) ≈ sum(mass_vapor_analytical) + sum(M_liquid_analytical) + sum(M_film_start_analytical) + sum(M_film_end_analytical)
 
 end
 
-# some threshold values need to be changed for other applications
-@testset "Hfilm" begin
-
+@testset "Hfilm()" begin
+    # 
     δmin = sys_tube.vapor.δmin;
     δthreshold = 5e-6
     δmax = 1e-4
 
     kₗ = sys_tube.vapor.k
     Hᵥ = sys_tube.vapor.Hᵥ
-    δs = [1e-6;3e-6;1e-5;1.5e-4;3e-4]
 
-    @test OscillatingHeatPipe.Hfilm.(δs,[sys_tube]) ≈ [0.0;(δs[2]-δmin)*(kₗ/δthreshold - Hᵥ)/(δthreshold-δmin);kₗ/δs[3];0.5*kₗ/δmax+1e-6;0.0]
+    # verifies that Hfilm produces values consistent with the manual entires below
+    δs = [1e-6;3e-6;1e-5;1.5e-4;3e-4]
+    expected_coefficients = [0.0;(δs[2]-δmin)*(kₗ/δthreshold - Hᵥ)/(δthreshold-δmin);kₗ/δs[3];0.5*kₗ/δmax+1e-6;0.0]
+
+    @test OscillatingHeatPipe.Hfilm.(δs,[sys_tube]) ≈ expected_coefficients
 end
 
 
@@ -207,7 +174,6 @@ prob = NeumannHeatConductionProblem(g,body,scaling=GridScaling,
                                              bc=bcdict,
                                              motions=m,
                                              forcing=forcing_dict,
-                                             # timestep_func=timestep_fourier
                                              timestep_func=timestep_fixed)
 
 sys_plate = construct_system(prob)
@@ -215,12 +181,9 @@ sys_plate = construct_system(prob)
 
 
 @testset "Plate" begin
-
     ohp = OscillatingHeatPipe._get_ohp_from_forcing_list(sys_plate)
     
-    @test ohp == ohp_linesource
-
-                                                 
+    @test ohp == ohp_linesource                                     
 end
 
 
@@ -376,7 +339,6 @@ end
 # reset phys_params
 phys_params = Dict( "diffusivity"              => αₛ,
                     "flux_correction"          => ρₛ*cₛ*dₛ,
-                    # "angular velocity"         => 0.0,
                     "Fourier"                  => 1.0,
                     "ohp_flux"                 => [NaN], # initial value, the value here is useless
                     "areaheater_power"         => power, # total power

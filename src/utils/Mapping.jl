@@ -47,7 +47,11 @@ function sys_interpolation_openloop(sys)
     X_inner_pres  = Array{Float64}(undef, 0)
     P_inner = Array{Float64}(undef, 0)
 
-    Xp  = sys.liquid.Xp
+    # these maps are applied once in dynamics, once here
+    # likely worth caching since the computation isn't trivial
+    ξ_L = map_ζ_to_ξ(sys.tube, sys.liquid.ζ_L)
+    ξ_R = map_ζ_to_ξ(sys.tube, sys.liquid.ζ_R)
+    ξp = collect(zip(ξ_L, ξ_R))
 
     @unpack PtoT = sys.propconvert
     θ = PtoT.(sys.vapor.P)
@@ -56,42 +60,41 @@ function sys_interpolation_openloop(sys)
     Af_R = sys.vapor.Af_R
     Lfilm_start = sys.vapor.Lfilm_start
     Lfilm_end = sys.vapor.Lfilm_end
-    Xpvapor = getXpvapor(Xp,sys.tube.closedornot)
+    ξp_vapor = getXpvapor(ξp,sys.tube.closedornot)
 
-    H_film_start = _film_heat_transfer(sys, Af_L, first.(Xpvapor))
-    H_film_end = _film_heat_transfer(sys, Af_R, last.(Xpvapor))
+    H_film_start = _film_heat_transfer(sys, Af_L, first.(ξp_vapor))
+    H_film_end = _film_heat_transfer(sys, Af_R, last.(ξp_vapor))
     H_vapor = sys.vapor.Hᵥ
     H_liquid = sys.liquid.Hₗ
 
     Nvapor = length(P)
 
-
-    append!(X_inner,sys.liquid.Xarrays[1])
+    append!(X_inner,sys.liquid.ξarrays[1])
     append!(θ_inner,sys.liquid.θarrays[1])
-    append!(H_inner,H_liquid .* ones(length(sys.liquid.Xarrays[1])))
-    append!(X_inner_pres,[Xp[1][1],Xp[1][end]])
+    append!(H_inner,H_liquid .* ones(length(sys.liquid.ξarrays[1])))
+    append!(X_inner_pres,[ξp[1][1],ξp[1][end]])
     append!(P_inner,[P[1], P[1]])
 
     for i = 1:Nvapor
 
         # vapors
-                append!(X_inner,[Xpvapor[i][1],Xpvapor[i][1]+Lfilm_start[i],
-                Xpvapor[i][1]+Lfilm_start[i],Xpvapor[i][end]-Lfilm_end[i],
-                Xpvapor[i][end]-Lfilm_end[i],Xpvapor[i][end]])
+                append!(X_inner,[ξp_vapor[i][1],ξp_vapor[i][1]+Lfilm_start[i],
+                ξp_vapor[i][1]+Lfilm_start[i],ξp_vapor[i][end]-Lfilm_end[i],
+                ξp_vapor[i][end]-Lfilm_end[i],ξp_vapor[i][end]])
 
                 append!(θ_inner,[θ[i],θ[i],θ[i],θ[i],θ[i],θ[i]])
                 append!(H_inner,[H_film_start[i], H_film_start[i],
                 H_vapor,H_vapor,
                 H_film_end[i],H_film_end[i]])
 
-                append!(X_inner_pres,[Xpvapor[i][1],Xpvapor[i][end]])
+                append!(X_inner_pres,[ξp_vapor[i][1],ξp_vapor[i][end]])
                 append!(P_inner,[P[i], P[i]])
     
         # liquids
-            append!(X_inner,sys.liquid.Xarrays[i+1])
+            append!(X_inner,sys.liquid.ξarrays[i+1])
             append!(θ_inner,sys.liquid.θarrays[i+1])
-            append!(H_inner,H_liquid .* ones(length(sys.liquid.Xarrays[i+1])))
-            append!(X_inner_pres,[Xp[i+1][1],Xp[i+1][end]])
+            append!(H_inner,H_liquid .* ones(length(sys.liquid.ξarrays[i+1])))
+            append!(X_inner_pres,[ξp[i+1][1],ξp[i+1][end]])
             append!(P_inner,[P[i], P[i]])
         end
 
@@ -133,7 +136,9 @@ function sys_interpolation_closedloop(sys)
     X_inner_pres  = Array{Float64}(undef, 0)
     P_inner = Array{Float64}(undef, 0)
 
-    Xp  = sys.liquid.Xp
+    ξ_L = map_ζ_to_ξ(sys.tube, sys.liquid.ζ_L)
+    ξ_R = map_ζ_to_ξ(sys.tube, sys.liquid.ζ_R)
+    ξp = collect(zip(ξ_L, ξ_R))
 
     @unpack PtoT = sys.propconvert
     θ = PtoT.(sys.vapor.P)
@@ -142,10 +147,10 @@ function sys_interpolation_closedloop(sys)
     Af_R = sys.vapor.Af_R
     Lfilm_start = sys.vapor.Lfilm_start
     Lfilm_end = sys.vapor.Lfilm_end
-    Xpvapor = getXpvapor(Xp,sys.tube.closedornot)
+    ξp_vapor = getXpvapor(ξp,sys.tube.closedornot)
 
-    H_film_start = _film_heat_transfer(sys, Af_L, first.(Xpvapor))
-    H_film_end = _film_heat_transfer(sys, Af_R, last.(Xpvapor))
+    H_film_start = _film_heat_transfer(sys, Af_L, first.(ξp_vapor))
+    H_film_end = _film_heat_transfer(sys, Af_R, last.(ξp_vapor))
     H_vapor = sys.vapor.Hᵥ
     H_liquid = sys.liquid.Hₗ
 
@@ -153,41 +158,41 @@ function sys_interpolation_closedloop(sys)
 
     loop_plus_index = [2:Nvapor;1]
 
-    max_i = argmax(Xpvapor) # vapor plug with largest arc coordinate
-    max_j = argmax(Xpvapor[max_i]) # end of this plug with the largest coordinate (1 or 2)
+    max_i = argmax(ξp_vapor) # vapor plug with largest arc coordinate
+    max_j = argmax(ξp_vapor[max_i]) # end of this plug with the largest coordinate (1 or 2)
   
     # Loop through the vapor and slugs (which there are equal number of)
     for i = 1:Nvapor
 
             if i == max_i && max_j != 2 # if this is the furthest plug and it crosses the branch cut
 
-                X_inner_loop_append,H_inner_loop_append = XHloop_append(i,H_film_start[i],H_film_end[i],sys)
+                X_inner_loop_append,H_inner_loop_append = XHloop_append(i,ξp_vapor[i],H_film_start[i],H_film_end[i],sys)
 
                 append!(X_inner,X_inner_loop_append)
                 append!(θ_inner,[θ[i], θ[i], θ[i], θ[i], θ[i], θ[i], θ[i], θ[i]])
                 append!(H_inner,H_inner_loop_append)
 
-                append!(X_inner_pres,[Xpvapor[i][1], _tube_length(sys.tube), 0.0, Xpvapor[i][end]])
+                append!(X_inner_pres,[ξp_vapor[i][1], _tube_length(sys.tube), 0.0, ξp_vapor[i][end]])
                 append!(P_inner,[P[i], P[i], P[i], P[i]])
             else 
-                append!(X_inner,[Xpvapor[i][1],Xpvapor[i][1]+Lfilm_start[i],
-                Xpvapor[i][1]+Lfilm_start[i],Xpvapor[i][end]-Lfilm_end[i],
-                Xpvapor[i][end]-Lfilm_end[i],Xpvapor[i][end]])
+                append!(X_inner,[ξp_vapor[i][1],ξp_vapor[i][1]+Lfilm_start[i],
+                ξp_vapor[i][1]+Lfilm_start[i],ξp_vapor[i][end]-Lfilm_end[i],
+                ξp_vapor[i][end]-Lfilm_end[i],ξp_vapor[i][end]])
 
                 append!(θ_inner,[θ[i],θ[i],θ[i],θ[i],θ[i],θ[i]])
                 append!(H_inner,[H_film_start[i], H_film_start[i],
                 H_vapor,H_vapor,
                 H_film_end[i],H_film_end[i]])
 
-                append!(X_inner_pres,[Xpvapor[i][1],Xpvapor[i][end]])
+                append!(X_inner_pres,[ξp_vapor[i][1],ξp_vapor[i][end]])
                 append!(P_inner,[P[i], P[i]])
     
         end
         
 
-    if (sys.liquid.Xarrays[i][1] > sys.liquid.Xarrays[i][end])
-        period_index = findmin(sys.liquid.Xarrays[i])[2]
-        Xarrays_temp = deepcopy(sys.liquid.Xarrays[i])
+    if (sys.liquid.ξarrays[i][1] > sys.liquid.ξarrays[i][end])
+        period_index = findmin(sys.liquid.ξarrays[i])[2]
+        Xarrays_temp = deepcopy(sys.liquid.ξarrays[i])
         θarrays_temp = deepcopy(sys.liquid.θarrays[i])
         
         
@@ -198,24 +203,24 @@ function sys_interpolation_closedloop(sys)
         append!(X_inner,Xarrays_temp)
         append!(θ_inner,θarrays_temp)
         
-        append!(H_inner,H_liquid .* ones(length(sys.liquid.Xarrays[i]) + 2))
+        append!(H_inner,H_liquid .* ones(length(sys.liquid.ξarrays[i]) + 2))
         
 
-        append!(X_inner_pres,[sys.liquid.Xarrays[i][1], _tube_length(sys.tube), 0.0, sys.liquid.Xarrays[i][end]])
-        P_inner_end = (_tube_length(sys.tube)-sys.liquid.Xarrays[i][1])/mod(sys.liquid.Xarrays[i][end]-sys.liquid.Xarrays[i][1],_tube_length(sys.tube)) * (P[loop_plus_index[i]]-P[i]) + P[i]
+        append!(X_inner_pres,[sys.liquid.ξarrays[i][1], _tube_length(sys.tube), 0.0, sys.liquid.ξarrays[i][end]])
+        P_inner_end = (_tube_length(sys.tube)-sys.liquid.ξarrays[i][1])/mod(sys.liquid.ξarrays[i][end]-sys.liquid.ξarrays[i][1],_tube_length(sys.tube)) * (P[loop_plus_index[i]]-P[i]) + P[i]
         append!(P_inner,[P[i], P_inner_end, P_inner_end, P[loop_plus_index[i]]])
 
         else
-            append!(X_inner,sys.liquid.Xarrays[i])
+            append!(X_inner,sys.liquid.ξarrays[i])
             append!(θ_inner,sys.liquid.θarrays[i])
-            append!(H_inner,H_liquid .* ones(length(sys.liquid.Xarrays[i])))
+            append!(H_inner,H_liquid .* ones(length(sys.liquid.ξarrays[i])))
         end
 end
 
         imin = argmin(X_inner)
-        X_inner_final =Array{Float64}(undef, 0)
-        θ_inner_final =Array{Float64}(undef, 0)
-        H_inner_final =Array{Float64}(undef, 0)
+        X_inner_final = X_inner
+        θ_inner_final = θ_inner
+        H_inner_final = H_inner
         if imin != 1
             X_inner_final = [X_inner[imin:end];X_inner[1:imin-1]]
             θ_inner_final = [θ_inner[imin:end];θ_inner[1:imin-1]]
@@ -223,8 +228,8 @@ end
         end
 
         imin = argmin(X_inner_pres)
-        X_inner_pres_final =Array{Float64}(undef, 0)
-        P_inner_final =Array{Float64}(undef, 0)
+        X_inner_pres_final = X_inner_pres
+        P_inner_final = P_inner
         if imin != 1
             X_inner_pres_final = [X_inner_pres[imin:end];X_inner_pres[1:imin-1]]
             P_inner_final = [P_inner[imin:end];P_inner[1:imin-1]]
@@ -258,11 +263,9 @@ end
 
 end
 
-function XHloop_append(i,H_film_start,H_film_end,sys)
+function XHloop_append(i,ξp_vapor,H_film_start,H_film_end,sys)
 
 
-    Xp = sys.liquid.Xp[i]
-    Xpvapor = getXpvapor(sys.liquid.Xp,sys.tube.closedornot)[i]
     Lfilm_start = sys.vapor.Lfilm_start[i]
     Lfilm_end = sys.vapor.Lfilm_end[i]
 
@@ -270,16 +273,16 @@ function XHloop_append(i,H_film_start,H_film_end,sys)
 
     L = _tube_length(sys.tube)
 
-    if Xpvapor[2] > Xpvapor[1]
+    if ξp_vapor[2] > ξp_vapor[1]
         # println("Xp error 1")
         return error("Xp error 1")
         
-    elseif mod(Xpvapor[1],L) + Lfilm_start > L
+    elseif mod(ξp_vapor[1],L) + Lfilm_start > L
         
-        X_inner_loop_append = mod.([Xpvapor[1],L,
-                0.0,Xpvapor[1]+Lfilm_start,
-                Xpvapor[1]+Lfilm_start,Xpvapor[end]-Lfilm_end,
-                Xpvapor[end]-Lfilm_end,Xpvapor[end]],L)
+        X_inner_loop_append = mod.([ξp_vapor[1],L,
+                0.0,ξp_vapor[1]+Lfilm_start,
+                ξp_vapor[1]+Lfilm_start,ξp_vapor[end]-Lfilm_end,
+                ξp_vapor[end]-Lfilm_end,ξp_vapor[end]],L)
         X_inner_loop_append[2] = L
         
         H_inner_loop_append = [H_film_start, H_film_start,
@@ -287,12 +290,12 @@ function XHloop_append(i,H_film_start,H_film_end,sys)
                 H_vapor,H_vapor,
                 H_film_end,H_film_end]
         
-    elseif Xpvapor[2] - Lfilm_end > 0.0
+    elseif ξp_vapor[2] - Lfilm_end > 0.0
         
-        X_inner_loop_append = mod.([Xpvapor[1],Xpvapor[1]+Lfilm_start,
-                Xpvapor[1]+Lfilm_start, L,
-                0.0, Xpvapor[end]-Lfilm_end,
-                Xpvapor[end]-Lfilm_end,Xpvapor[end]],L)
+        X_inner_loop_append = mod.([ξp_vapor[1],ξp_vapor[1]+Lfilm_start,
+                ξp_vapor[1]+Lfilm_start, L,
+                0.0, ξp_vapor[end]-Lfilm_end,
+                ξp_vapor[end]-Lfilm_end,ξp_vapor[end]],L)
         X_inner_loop_append[4] = L
         
         H_inner_loop_append = [H_film_start, H_film_start,
@@ -300,12 +303,12 @@ function XHloop_append(i,H_film_start,H_film_end,sys)
                 H_vapor, H_vapor,
                 H_film_end,H_film_end]
         
-    elseif Xpvapor[2] > 0
+    elseif ξp_vapor[2] > 0
         
-        X_inner_loop_append = mod.([Xpvapor[1],Xpvapor[1]+Lfilm_start,
-                Xpvapor[1]+Lfilm_start,  Xpvapor[end]-Lfilm_end,
-                Xpvapor[end]-Lfilm_end,L,
-                0.0,Xpvapor[end]],L)
+        X_inner_loop_append = mod.([ξp_vapor[1],ξp_vapor[1]+Lfilm_start,
+                ξp_vapor[1]+Lfilm_start,  ξp_vapor[end]-Lfilm_end,
+                ξp_vapor[end]-Lfilm_end,L,
+                0.0,ξp_vapor[end]],L)
         X_inner_loop_append[6] = L
         
         H_inner_loop_append = [H_film_start, H_film_start,
