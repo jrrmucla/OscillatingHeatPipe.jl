@@ -404,7 +404,7 @@ function suitable_for_boiling(p,i)
 end
 
 function get_vapor_energy(sys0::UniformPhpSystem)
-    volume_vapor = getVolumevapor(sys0)
+    volume_vapor = get_vapor_volume(sys0)
     PtoT = sys0.propconvert.PtoT
     return sum(PtoT.(sys0.vapor.P) .* sys0.liquid.Cpₗ .* volume_vapor)
 end

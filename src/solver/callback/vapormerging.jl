@@ -19,7 +19,7 @@ function vaporMergingAffect!(integrator)
     Lfilm_start = p.vapor.Lfilm_start
     Lfilm_end = p.vapor.Lfilm_end
 
-    volume_vapor = getVolumevapor(p)
+    volume_vapor = get_vapor_volume(p)
     @unpack PtoD = p.propconvert
     M = PtoD.(p.vapor.P) .* volume_vapor
 

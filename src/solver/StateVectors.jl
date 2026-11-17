@@ -138,7 +138,7 @@ function getcurrentsys_nowall!(u,sys0)
     sysnew.vapor.Lfilm_start = Lfilm_start
     sysnew.vapor.Lfilm_end = Lfilm_end
 
-    volume_vapor = getVolumevapor(sysnew)
+    volume_vapor = get_vapor_volume(sysnew)
     ρ = M ./ volume_vapor
     @unpack DtoP = sysnew.propconvert
     sysnew.vapor.P = DtoP.(ρ)

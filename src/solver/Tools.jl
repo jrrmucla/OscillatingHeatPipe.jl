@@ -1,7 +1,7 @@
 export getgvec,getgh,delta, # get actrual heightg of the tube
 ξ_to_vapor_length,ξ_to_liquid_length,ζ_to_vapor_volume,ζ_to_liquid_volume,getXpvapor, # transfer Xp to the length of vapors, length of liquids, and Xp for vapor.
 # ifamong,constructXarrays,
-Hfilm,getδarea,getδFromδarea,getMvapor,getMfilm,getMliquid,getMtotal,getchargeratio,getVolumevapor,
+Hfilm,getδarea,getδFromδarea,getMvapor,getMfilm,getMliquid,getMtotal,getchargeratio,get_vapor_volume,
 getCa,f_churchill,Catoδ,RntoΔT,systoM
 
 function getgvec(g0::T,g_angle::T=3/2*π) where {T<:Real}
@@ -254,11 +254,9 @@ getδFromδarea(Ac,d,δarea) = (d / 2) * (δarea / Ac) / (1 + sqrt(1 - δarea / 
 # for very thin films. Invalid areas above Ac retain a DomainError.
 
 """
-    getMtotal(sys::UniformPhpSystem) -> Scalar
-
 Return the masses of all of the vapor,liquid, and film regions
 """
-function getMtotal(sys)
+function getMtotal(sys::AbstractPHP)
     return sum(getMvapor(sys)) + sum(getMliquid(sys)) + sum(sum(getMfilm(sys)))
 end
 
@@ -266,27 +264,16 @@ end
     getchargeratio(sys::UniformPhpSystem) -> Scalar
 
 Return the chargeratio considering all of the vapor,liquid, and film regions
+
+TODO: this isn't consistent with initialization scheme
+and it looks like initialization is in the wrong
 """
-function getchargeratio(sys)
+function getchargeratio(sys::AbstractPHP)
     Mtotal = getMtotal(sys)
     @unpack ρₗ = sys.liquid # get the liquid density
     Vtotal = _tube_volume(sys.tube)
     Mliquidfull = ρₗ * Vtotal # mass of the tube if it is full of liquid
     return Mtotal / Mliquidfull
-end
-
-"""
-    getMtotal(sys::UniformPhpSystem)
-
-Given tube system `sys`, return the total mass of the all regions.
-"""
-function getMtotal(sys0::UniformPhpSystem)
-
-    Mvapor = sum(getMvapor(sys0))
-    Mliquid = sum(getMliquid(sys0))
-    Mfilm = sum(sum.(getMfilm(sys0)))
-
-    return Mvapor + Mliquid + Mfilm
 end
  
 """
@@ -294,7 +281,7 @@ end
 
 Return the masses of all of the vapor regions
 """
-function getMvapor(sys)
+function getMvapor(sys::AbstractPHP)
 
     @unpack propconvert, vapor = sys
     @unpack PtoD = propconvert
@@ -302,17 +289,17 @@ function getMvapor(sys)
 
     ρᵥ = PtoD.(P)
 
-    return ρᵥ .* getVolumevapor(sys)
+    return ρᵥ .* get_vapor_volume(sys)
     
 end
 
 
 """
-    getVolumevapor(sys::UniformPhpSystem)
+    get_vapor_volume(sys)
 
 Return the volumes of the vapor regions, given the tube system `sys`.
 """
-function getVolumevapor(sys)
+function get_vapor_volume(sys::AbstractPHP)
     @unpack tube, vapor, liquid = sys
     @unpack Af_L, Af_R, Lfilm_start, Lfilm_end = vapor
     @unpack ζ_L, ζ_R = liquid
@@ -321,11 +308,9 @@ function getVolumevapor(sys)
 end
 
 """
-    getMfilm(sys::UniformPhpSystem)
-
 Return the masses of all of the liquid films in the system.
 """
-function getMfilm(sys)
+function getMfilm(sys::AbstractPHP)
     @unpack tube, vapor, liquid = sys
     @unpack Af_L, Af_R, Lfilm_start, Lfilm_end = vapor
     @unpack ρₗ = liquid
@@ -334,11 +319,9 @@ function getMfilm(sys)
 end
 
 """
-    getMliquid(sys::UniformPhpSystem)
-
 Return the masses of all of the liquid slugs in the system.
 """
-function getMliquid(sys)
+function getMliquid(sys::AbstractPHP)
     @unpack tube, liquid = sys
     @unpack ρₗ, ζ_L, ζ_R = liquid
     volumes = tube.closedornot ? ζ_to_liquid_volume(ζ_L, ζ_R, _tube_volume(tube)) : ζ_R - ζ_L

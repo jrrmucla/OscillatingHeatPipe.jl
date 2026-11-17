@@ -26,10 +26,10 @@ using OscillatingHeatPipe
                 end
                 films = vapor.Af_L .* vapor.Lfilm_start + vapor.Af_R .* vapor.Lfilm_end
                 expected_liquid = integral.(right) - integral.(left)
-                @test getVolumevapor(sys) ≈ gaps - films
+                @test get_vapor_volume(sys) ≈ gaps - films
                 @test getMvapor(sys) ≈ 2 .* (gaps - films)
                 @test getMliquid(sys) ≈ 600 .* expected_liquid
-                @test sum(getVolumevapor(sys)) + sum(films) + sum(expected_liquid) ≈ integral(1.0)
+                @test sum(get_vapor_volume(sys)) + sum(films) + sum(expected_liquid) ≈ integral(1.0)
                 @test ohp._tube_volume(tube) ≈ integral(1.0)
                 @test getchargeratio(sys) ≈ getMtotal(sys) / (600 * integral(1.0))
             end

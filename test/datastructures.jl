@@ -91,7 +91,7 @@ sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
     @test all(map((u,v) -> u[1]==v,Adep,δarea_end))
     @test all(map(u -> u[2]≈δarea_dep,Adep))
 
-    vol = getVolumevapor(sys_tube)
+    vol = get_vapor_volume(sys_tube)
     @test all(vol .> 0)
 end
 
