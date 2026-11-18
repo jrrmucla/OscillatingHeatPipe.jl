@@ -1,6 +1,6 @@
 using JLD2: jldopen
 
-export save_results, load_results
+export save_results, load_results, reparse_u_v1_as_u_v2
 
 # in the migration to support non-uniform tubes, the data structures are 
 # going to change significantly across the next several commits
@@ -70,20 +70,25 @@ function load_results(path::AbstractString; kind::Symbol=:auto)
             throw(ArgumentError("Not a versioned OHP results file; regenerate or explicitly migrate legacy data"))
         haskey(file, "format_version") || throw(ArgumentError("Missing results format version"))
         version = file["format_version"]
-        version == RESULTS_FORMAT_VERSION || throw(ArgumentError("Unsupported results format version: $version"))
-        # Dispatch future supported versions here, before decoding their payloads.
-        version == 1 && _load_results_v1(file, kind)
+        if (version == 1)
+            return _load_results_v1_v2(file, kind)
+        elseif (version == 2)
+            return _load_results_v1_v2(file, kind)
+        else
+            throw(ArgumentError("Unsupported results format version: $version"))
+        end
     end
 end
 
-# Version 1 of the save format
 # there are two 'kinds' of result within the file:
 # 'history' contains numerical values only -> used for regression testing
 # 'checkpoint' contains numerical values and integrators -> used for postprocessing
 # Version 1 uses the SimulationResult struct from 205ff6bab4d94a44f9c0c082e9f7e04b0580975d
 # Version 2 uses the SimulationResult struct from 0484a7d65f8b94f9d86cae09ccd94396f858a6ad
+# we can reuse this function for both version because they contain the same RESULTS_HISTORY_FIELDS
+# only the number/meaning of values in the state vectors are different
 
-function _load_results_v1(file, kind)
+function _load_results_v1_v2(file, kind)
     stored_kind = file["kind"]
     stored_kind in ("history", "checkpoint") || throw(ArgumentError("Unknown stored result kind: $stored_kind"))
     kind == :checkpoint && stored_kind != "checkpoint" &&
@@ -94,4 +99,70 @@ function _load_results_v1(file, kind)
     end
     NamedTuple{RESULTS_HISTORY_FIELDS}(Tuple(
         _results_numeric(file["history/$(field)"]) for field in RESULTS_HISTORY_FIELDS))
+end
+
+"""
+    u_v1_to_XMδL(u) -> Vector{Tuple}, Vector{Tuple}, Vector, Vector, Vector, Vector, Vector, Vector, Vector
+
+Disassemble the state vector `u` into vectors `Xp`, `dXdt` of the coordinates and velocities of the slug interfaces, and
+mass `M` of the vapor regions, `δstart` and `δend` of film thicknesses, and `Lfilm_start`
+and `Lfilm_end` of film lengths.
+"""
+function u_v1_to_XMδL(u::Array{Float64,1})
+
+    maxindex = div(length(u),9)
+    maxliquidindex = 0
+    if mod(length(u),9) == 4
+        maxliquidindex = maxindex + 1
+    elseif mod(length(u),9) == 0
+        maxliquidindex = maxindex
+    else
+        return error("The state vector given has ", length(u), " elements. We expect groupings of either 9n-5, or 9n, where n is number of liquid slugs.")
+    end
+
+    Xp =   map(tuple, zeros(maxliquidindex), zeros(maxliquidindex))
+    dXdt = map(tuple, zeros(maxliquidindex), zeros(maxliquidindex))
+    for i = 1:maxliquidindex
+        # input Xp
+        Xp[i] = (u[2*i-1],u[2*i])
+        # input dXdt
+        dXdt[i] = (u[2*maxliquidindex + 2*i-1],u[2*maxliquidindex + 2*i])
+    end
+
+    M =             u[4*maxliquidindex+1:           4*maxliquidindex+maxindex]
+    δstart =        u[4*maxliquidindex+maxindex+1:  4*maxliquidindex+2maxindex]
+    δend =          u[4*maxliquidindex+2maxindex+1: 4*maxliquidindex+3maxindex]
+    Lfilm_start =   u[4*maxliquidindex+3maxindex+1: 4*maxliquidindex+4maxindex]
+    Lfilm_end =     u[4*maxliquidindex+4maxindex+1: 4*maxliquidindex+5maxindex]
+    return Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end
+end
+
+"""
+Take a complete state vector in the V1 specification and return a flat V2 state vector.
+Convert only the mechanical prefix; preserve all temperature separators and profiles unchanged.
+The block lengths below exclude the separator-delimited temperature suffix.
+
+V1 State Vector
+- u =  [Xp; dXdt; M; δstart; δend; Lfilm_start; Lfilm_end]
+- Xp is tuple, first value left interface, second value is right interface
+- dXdt is tuple, duplicated information in both values
+- total length is 4*NL + 5*NV
+
+V2 State Vector
+- u = [ζ_L; ζ_R; Q_B; M; Af_left; Af_right; Lfilm_left; Lfilm_right]
+- total length is 3*NL + 5*NV
+"""
+function reparse_u_v1_as_u_v2(u_v1::AbstractVector, Ac::Real, Dh::Real)
+    separator = findfirst(==(SEPERATION_VAR), u_v1)
+    isnothing(separator) && throw(ArgumentError("V1 state must contain a temperature separator"))
+    mechanical = Vector{Float64}(u_v1[1:separator-1])
+    temperatures = u_v1[separator:end]
+    Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end = u_v1_to_XMδL(mechanical)
+    ζ_L = Ac * [first(ξp) for ξp in Xp]
+    ζ_R = Ac * [last(ξp) for ξp in Xp]
+    Q_B = Ac * [first(Vp) for Vp in dXdt]
+    Af_L = getδarea(Ac,Dh,δstart)
+    Af_R = getδarea(Ac,Dh,δend)
+    u_v2 = [ζ_L; ζ_R; Q_B; M; Af_L; Af_R; Lfilm_start; Lfilm_end; temperatures]
+    return u_v2
 end

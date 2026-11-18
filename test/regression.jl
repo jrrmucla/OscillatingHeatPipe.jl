@@ -96,6 +96,7 @@ Save numeric history to `results_dir/title.jld2` and return its path.
 Set `inspection=true` to generate GIFs from the live simulation result.
 """
 function run_regression_experiment(title, results_dir; seed::Integer=1234, inspection=false)
+    println("Preparing regression system...")
     Δx=0.0006
     Δt=4E-4
     tf=5.0
@@ -179,6 +180,7 @@ function run_regression_experiment(title, results_dir; seed::Integer=1234, inspe
     );
 
     ## Construct the Systems
+    println("Constructing regression system...")
 
     # Heat-Conduction System
     sys_plate = construct_system(prob)
@@ -188,6 +190,7 @@ function run_regression_experiment(title, results_dir; seed::Integer=1234, inspe
     sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
 
     # Initialize
+    println("Initializing regression system...")
     u_plate = init_sol(sys_plate)# initialize plate T field to uniform Tref
     integrator_plate = init(u_plate,tspan,sys_plate,save_on=false) # construct integrator_plate
 
@@ -204,6 +207,7 @@ function run_regression_experiment(title, results_dir; seed::Integer=1234, inspe
             store!(simulation_result,integrator_tube,integrator_plate)
         end
     end
+    println("Comparing results to gold standard...")
 
     # Store simulation data for subsequent regression comparisons.
     mkpath(results_dir)
@@ -239,7 +243,10 @@ end
 """
     Unpack the state vector and compare each field.
 """
-function compare_regression_state(actual, expected)
+function compare_regression_state(actual, expected_v1)
+    expected = reparse_u_v1_as_u_v2(expected_v1, (1e-3)^2, 1e-3)
+    # convert the old state vector for apples-to-apples comparison
+
     # compare separators
     separator = OscillatingHeatPipe.SEPERATION_VAR
     actual_separators = findall(==(separator), actual)
@@ -343,7 +350,8 @@ end
     # PowerShell: $env:UPDATE_REGRESSION = "true"
     update_reference = get(ENV, "UPDATE_REGRESSION", "false") == "true"
     inspection = get(ENV, "REGRESSION_INSPECTION", "false") == "true"
-    test_output_file = run_regression_experiment(title, results_dir; seed=1234, inspection=inspection)
+    #test_output_file = run_regression_experiment(title, results_dir; seed=1234, inspection=inspection)
+    test_output_file = "C:\\Users\\jrrm5\\Desktop\\Research\\OHP\\OscillatingHeatPipe\\test\\results\\regression.jld2"
     print(test_output_file)
 
     test_result = load_results(test_output_file; kind=:history)

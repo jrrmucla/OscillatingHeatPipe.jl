@@ -240,7 +240,7 @@ circular channel, with `0 ≤ δ ≤ d/2`. It also describes a uniform wall film
 in a square channel when `d` is its side length; arbitrary cross sections
 require their own geometry relation.
 """
-getδarea(Ac,d,δ) = Ac * (2δ / d) * (2 - 2δ / d)
+getδarea(Ac::Real,Dh::Real,δ::Union{Real,AbstractArray{<:Real}}) = Ac .* (2δ ./ Dh) .* (2 .- 2δ ./ Dh)
 
 """
     getδFromδarea(Ac,d,δarea)
