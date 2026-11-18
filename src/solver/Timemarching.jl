@@ -87,13 +87,9 @@ function init(u_tube::Vector{Float64},tspan::Tuple{Any, Any},sys_tube::UniformPh
     cb_fixdx =  DiscreteCallback(fixdx_condition,fixdx_affect!)
     cb_slugbc = DiscreteCallback(slugbc_condition,slugbc_affect!)
     cbst = CallbackSet(cb_fixdx,cb_boiling,cb_vapormerging,cb_liquidmerging,cb_slugbc);
-    
-    # cb_liquidmerging =  DiscreteCallback(merging_condition,merging_affect!)
-    # cbst = CallbackSet(cb_liquidmerging);
 
     prob = ODEProblem(ODE_innertube, u_tube, tspan, sys_tube,kwargs...) # construct integrator_tube problem
     return init(prob, alg=RK4(),dt=1e-3,save_on=false, callback=cbst,maxiters=1e10,kwargs...)
-    # return init(prob, alg=RK4(),dt=1e-3,save_on=false, maxiters=1e10,kwargs...)
 end
 
 function exchangepinfo!(integrator_tube::ODEIntegrator,integrator_plate::ODEIntegrator)

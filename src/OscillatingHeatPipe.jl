@@ -37,6 +37,7 @@ include("solver/Thermomodel.jl")
 include("solver/Tools.jl")
 include("solver/Timemarching.jl")
 
+include("solver/callback/utils.jl")
 include("solver/callback/boiling.jl")
 include("solver/callback/vapormerging.jl")
 include("solver/callback/liquidmerging.jl")

@@ -1,88 +1,122 @@
+#=
+boiling.jl
+
+The OHP model needs a way to handle the formation of new vapor bubbles, this 
+callback is responsible for the nitty-gritty details of where, why, and how
+those new vapor bubbles form.
+
+We allow boiling only at particular stations that are created during 
+initialization, defined by
+- Position in ξ: Xstations
+- Last time that the station was in vapor: boiltime_stations   
+    (including as a result of boiling at said station)
+
+When a new bubble is created...
+- length is determined by L_newbubble, a constant in sys.wall
+- temperature is taken either as wall temp, or liquid temp -> determines pressure
+- film characteristics follow some preset rules, TODO definitely should talk to Yuxuan about
+  the basic justification behind them
+=#
+
 export boiling_affect!,nucleateboiling,boiling_condition
-# boiling_condition,
+
+"""   
+Determines whether the integrator should check for boiling events
+"""
 function boiling_condition(u,t,integrator)
+    _reject_nonuniform(integrator.p)
     t_interval = DEFAULT_BOIL_SCAN_INTERVAL
-
     ϵ = 1e-5
-
     return (abs(mod(t,t_interval)-t_interval) < ϵ) || mod(t,t_interval) < ϵ
 end
 
+"""
+Entry point for the boiling callback to affect a PHPSystem integrator
+"""
 function boiling_affect!(integrator)
 
-    p = deepcopy(getcurrentsys_nowall!(integrator.u,integrator.p))
+    sys = deepcopy(getcurrentsys_nowall!(integrator.u,_reject_nonuniform(integrator.p)))
 
-    @unpack wall, propconvert, tube, vapor, liquid = p
+    @unpack wall, propconvert, tube, vapor, liquid = sys
     @unpack fluid_type, PtoT, TtoP, PtoD = propconvert
     @unpack boil_type, boil_interval, Rn, Xstations, boiltime_stations, L_newbubble = wall
-    @unpack d = tube
+    @unpack Dh = tube
     @unpack P = vapor
 
     Tavg = (PtoT.(maximum(P)) + PtoT.(minimum(P)))/2
 
-    Δθthreshold = RntoΔT(Rn,Tavg,fluid_type,d,TtoP)
-  
-    Δθ_array = getsuperheat.(Xstations,Ref(p))
-    superheat_flag = (Δθ_array .> Δθthreshold) .* ((integrator.t .- p.wall.boiltime_stations) .> boil_interval)
+    Δθthreshold = RntoΔT(Rn,Tavg,fluid_type,Dh,TtoP)
 
-    b_count = 0;
+    Δθ_array = getsuperheat.(Xstations,Ref(sys))
+    superheat_flag = (Δθ_array .> Δθthreshold) .* ((integrator.t .- sys.wall.boiltime_stations) .> boil_interval)
+
+    boil_event_count = 0;
     boiltime_update_flags = Bool.(zero(boiltime_stations))
 
-    # in the loop below, p.liquid.Xp cannot be replaced by Xp, because p will change within the loop
-    for i in eachindex(Xstations)
-        if ifamong(Xstations[i], p.liquid.Xp) && suitable_for_boiling(p,i) && superheat_flag[i]
-                push!(integrator.p.cache.boil_hist,[i,integrator.t]);
-                b_count += 1;
+    # requirements for boiling to occur
+    superheat_at_station(i::Int) = superheat_flag[i]
+    liquid_at_station(i::Int) = ifamong(Xstations[i], _ξp(sys))
+    space_for_new_bubble(i::Int) = is_there_space_for_new_bubble(sys,i)
 
-                if boil_type == "liquid T"
-                    Pinsert = p.mapping.P_interp_liquidtowall(Xstations[i])
-                elseif boil_type == "wall T"
-                    Pinsert = TtoP(p.mapping.θ_interp_walltoliquid(Xstations[i]))
-                end
-                # println("boiling",get_vapor_energy(p)+get_liquid_energy(p))
-                p = nucleateboiling(p,(Xstations[i]-L_newbubble/2,Xstations[i]+L_newbubble/2),Pinsert) # P need to be given from energy equation
-                # println("boiling",get_vapor_energy(p)+get_liquid_energy(p))
-                boiltime_update_flags[i] = true
-                # p.wall.boiltime_stations[i] = integrator.t
-            elseif !ifamong(Xstations[i], p.liquid.Xp)
-                boiltime_update_flags[i] = true
-                # p.wall.boiltime_stations[i] = integrator.t
+    # in the loop below, _ξp(sys) cannot be cached, because values will change within the loop
+    for i in eachindex(Xstations)
+        if liquid_at_station(i) && space_for_new_bubble(i) && superheat_at_station(i)
+            push!(integrator.p.cache.boil_hist,[i,integrator.t]);
+            boil_event_count += 1;
+
+            if boil_type == "liquid T"
+                new_vapor_pressure = sys.mapping.P_interp_liquidtowall(Xstations[i])
+            elseif boil_type == "wall T"
+                new_vapor_pressure = TtoP(sys.mapping.θ_interp_walltoliquid(Xstations[i]))
+            end
+
+            # TODO: ask Yuxuan about this comment: 'P needs to be given from energy equation'
+            # println("pre-boiling energy",get_vapor_energy(p)+get_liquid_energy(p))
+            sys = nucleateboiling(sys,(Xstations[i]-L_newbubble/2,Xstations[i]+L_newbubble/2),new_vapor_pressure)
+            # println("post-boiling energy:",get_vapor_energy(p)+get_liquid_energy(p))
+
+            boiltime_update_flags[i] = true
+
+        elseif !liquid_at_station(i)
+            boiltime_update_flags[i] = true
         end
     end
 
     boiltime_stations_new = boiltime_stations + boiltime_update_flags .* (integrator.t .- boiltime_stations)
     integrator.p.wall.boiltime_stations = boiltime_stations_new
-    
-    M = getMvapor(p)
 
-    unew=[ζMAL_to_u(p.liquid.ζ_L,p.liquid.ζ_R,p.liquid.Q_B,M,p.vapor.Af_L,p.vapor.Af_R,p.vapor.Lfilm_start,p.vapor.Lfilm_end);liquidθtovec(p.liquid.θarrays)];
+    postboil_vapor_mass = getMvapor(sys)
+
+    unew=[ζMAL_to_u(sys.liquid.ζ_L, sys.liquid.ζ_R, sys.liquid.Q_B, 
+        postboil_vapor_mass, sys.vapor.Af_L, sys.vapor.Af_R, sys.vapor.Lfilm_start, sys.vapor.Lfilm_end);
+        liquidθtovec(sys.liquid.θarrays)];
 
     resize!(integrator.u,length(unew))
     integrator.u = deepcopy(unew)
 end
 
-function nucleateboiling(sys,Xvapornew,Pinsert)
+function nucleateboiling(sys::UniformPhpSystem, new_vapor_ξ::Tuple{<:Real,<:Real}, new_vapor_P::Real)
+    # TODO: understand (and hopefully improve on) the approach here, in interest of time I am leaving as much as possible as-is
     ρₗ = deepcopy(sys.liquid.ρₗ)
     Ac = sys.tube.Ac
-    d = deepcopy(sys.tube.Dh)
-    Xp = deepcopy(sys.liquid.Xp)
-    dXdt = deepcopy(sys.liquid.dXdt)
+    ξp = _ξp(sys)
+    Q_B = copy(sys.liquid.Q_B)
     Af_L = deepcopy(sys.vapor.Af_L)
     Af_R = deepcopy(sys.vapor.Af_R)
-    
+
     P = deepcopy(sys.vapor.P)
     L = sys.tube.L
-    
-    Xarrays = sys.liquid.Xarrays
+
+    ξarrays = sys.liquid.ξarrays
     θarrays = sys.liquid.θarrays
     closedornot = sys.tube.closedornot
     Lfilm_start = deepcopy(sys.vapor.Lfilm_start)
     Lfilm_end = deepcopy(sys.vapor.Lfilm_end)
 
 
-    index = getinsertindex(Xp,(Xvapornew[2]+Xvapornew[1])/2,sys.tube.L,sys.tube.closedornot)
+    index = getinsertindex(ξp,(new_vapor_ξ[2]+new_vapor_ξ[1])/2,sys.tube.L,sys.tube.closedornot)
 
-    Linsert = mod(Xvapornew[end] - Xvapornew[1],L)
+    Linsert = mod(new_vapor_ξ[end] - new_vapor_ξ[1],L)
 
     """let's do constant film thickness for now!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"""
     δdeposit = 2e-5
@@ -91,43 +125,40 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
 
 
     Nvapor = length(P)
-    loop_plus_index = [2:Nvapor;1]
-    loop_plus_index_new = [3:Nvapor+1;1:2]
-    loop_minus_index = [Nvapor;1:Nvapor-1]
     loop_minus_index_new = [Nvapor+1;1:Nvapor]
 
     Lfilm_start_new = insert!(Lfilm_start,index+1,Linsert/8)
     Lfilm_end_new = insert!(Lfilm_end,index+1,Linsert/8)
 
     Lliquid_adjust = 0
-    Xpnew = getnewXp(Xp,index,Xvapornew,Lliquid_adjust,L,closedornot)
+    Xpnew = getnewXp(ξp,index,new_vapor_ξ,Lliquid_adjust,L,closedornot)
 
     # const P in adjacent vapors
-    Pnew = insert!(P,index+1,Pinsert)
+    Pnew = insert!(P,index+1,new_vapor_P)
 
-    dXdtnew = deepcopy(dXdt) # momentum conservation
-    insert!(dXdtnew,index+1,dXdtnew[index])
+    Q_B_new = copy(Q_B) # momentum conservation
+    insert!(Q_B_new,index+1,Q_B_new[index])
 
     sysnew = deepcopy(sys)
 
-    sysnew.liquid.Xp = Xpnew
-    sysnew.liquid.dXdt = dXdtnew
+    _set_ξp!(sysnew, Xpnew)
+    sysnew.liquid.Q_B = Q_B_new
     sysnew.vapor.P = Pnew
     sysnew.vapor.Af_L = Af_L_new
     sysnew.vapor.Af_R = Af_R_new
     sysnew.vapor.Lfilm_start = Lfilm_start_new
     sysnew.vapor.Lfilm_end = Lfilm_end_new
 
-    # multuply a factor to adjust the length of vapor/liquid to conserve mass, accounting for the inserted vapor volume.
+    # multiply a factor to adjust the length of vapor/liquid to conserve mass, accounting for the inserted vapor volume.
     PtoD = sys.propconvert.PtoD
-    ρinsert = PtoD(Pinsert)
+    ρinsert = PtoD(new_vapor_P)
     Mvapor_new = sum(getMvapor(sysnew))
     Mfilm_new = sum(sum.(getMfilm(sysnew)))
     Mliquid_new = sum(getMliquid(sysnew))
     Mold = sysnew.cache.mass
     L_adjust = (Mvapor_new + Mfilm_new + Mliquid_new - Mold)./ (ρₗ*Ac) .* (1 +  ρinsert/ρₗ)
 
-    Lvaporplug = ξ_to_vapor_length(first.(sysnew.liquid.Xp), last.(sysnew.liquid.Xp),sysnew.tube.L,sysnew.tube.closedornot)
+    Lvaporplug = ξ_to_vapor_length(first.(Xpnew), last.(Xpnew),sysnew.tube.L,sysnew.tube.closedornot)
     Lpurevapor = Lvaporplug .- Lfilm_start_new .- Lfilm_end_new
     Lliquidslug = ξ_to_liquid_length(first.(Xpnew), last.(Xpnew), sys.tube.L)
 
@@ -152,8 +183,8 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
             maxindex = Lpurevapor_maxindex
             maxvalue_type = 3 # 1: Lfilm_start, 2: Lfilm_end , 3: Lpurevapor
 
-            sysnew.liquid.Xp[maxindex] = mod.((sysnew.liquid.Xp[maxindex][1]+L_adjust,sysnew.liquid.Xp[maxindex][2]),L)
-        # If the longest pure vapor part is not long enough we will shrink the longest liquid film part.   
+            Xpnew[maxindex] = mod.((Xpnew[maxindex][1]+L_adjust,Xpnew[maxindex][2]),L)
+        # If the longest pure vapor part is not long enough we will shrink the longest liquid film part.
         else
             # find the index of the longest total liquid film part, then find the side of the longest liquid film part, then shrink it.
             maxindex = findmax(Lfilm_start_new .+ Lfilm_end_new)[2]
@@ -169,9 +200,9 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
                 if maxvalue > -L_adjust*factor_adjust
 
                 sysnew.vapor.Lfilm_start[maxindex] = sysnew.vapor.Lfilm_start[maxindex] + L_adjust*factor_adjust
-                sysnew.liquid.Xp[loop_minus_index_new[maxindex]] = mod.((sysnew.liquid.Xp[loop_minus_index_new[maxindex]][1],sysnew.liquid.Xp[loop_minus_index_new[maxindex]][2]-L_adjust*factor_adjust),L) 
+                Xpnew[loop_minus_index_new[maxindex]] = mod.((Xpnew[loop_minus_index_new[maxindex]][1],Xpnew[loop_minus_index_new[maxindex]][2]-L_adjust*factor_adjust),L)
 
-                else 
+                else
                     println("L_adjust:",L_adjust)
                     println("maxvalue:",maxvalue)
                     println("maxvalue_type:",maxvalue_type)
@@ -187,9 +218,9 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
                 if maxvalue > -L_adjust*factor_adjust
 
                 sysnew.vapor.Lfilm_end[maxindex] = sysnew.vapor.Lfilm_end[maxindex] + L_adjust*factor_adjust
-                sysnew.liquid.Xp[maxindex] = mod.((sysnew.liquid.Xp[maxindex][1]+L_adjust*factor_adjust,sysnew.liquid.Xp[maxindex][2]),L)   
-   
-                else 
+                Xpnew[maxindex] = mod.((Xpnew[maxindex][1]+L_adjust*factor_adjust,Xpnew[maxindex][2]),L)
+
+                else
                     println("L_adjust:",L_adjust)
                     println("maxvalue:",maxvalue)
                     println("maxvalue_type:",maxvalue_type)
@@ -214,8 +245,8 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
         maxvalue_type = 1 # when vapor part needs to increase length, we only increase the Lpurevapor, 1: Lpurevapor, 2: Lfilm_start, 3: Lfilm_end
 
         if maxvalue > L_adjust
-            sysnew.liquid.Xp[maxindex] = mod.((sysnew.liquid.Xp[maxindex][1]+L_adjust,sysnew.liquid.Xp[maxindex][2]),L)
-        else 
+            Xpnew[maxindex] = mod.((Xpnew[maxindex][1]+L_adjust,Xpnew[maxindex][2]),L)
+        else
             # maxindex = 0
             println("L_adjust:",L_adjust)
             println("maxvalue:",maxvalue)
@@ -228,15 +259,16 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
 
     # up to now we got the correct Xpnew, next step is to get Xarraysnew, the splitted Xarrays.
 
-    Xarraysnew,θarraysnew = getnewXθarrays(index,sysnew.liquid.Xp,Xarrays,θarrays,L,maxindex,maxvalue_type)
-    # θarraysnew = getnewθarrays(index,Xp,sysnew.liquid.Xp,Xarrays,θarrays,L,closedornot)
+    _set_ξp!(sysnew, Xpnew)
+    Xarraysnew,θarraysnew = getnewXθarrays(index,Xpnew,ξarrays,θarrays,L,maxindex,maxvalue_type)
+    # θarraysnew = getnewθarrays(index,Xp,Xpnew,Xarrays,θarrays,L,closedornot)
 
-    sysnew.liquid.Xarrays = Xarraysnew
+    sysnew.liquid.ξarrays = Xarraysnew
     sysnew.liquid.θarrays = θarraysnew
 
     sysnew.mapping = refresh_interpolations(sysnew)
 
-return sysnew
+    return sysnew
 end
 
 function getnewXθarrays(index,Xpnew,Xarrays_old,θarrays_old,L,maxindex,maxvalue_type)
@@ -248,9 +280,8 @@ function getnewXθarrays(index,Xpnew,Xarrays_old,θarrays_old,L,maxindex,maxvalu
     Xarraysnew = deepcopy(Xarrays_old)
     θarraysnew = deepcopy(θarrays_old)
 
-    # Lliquidslug_old =       mod((Xarrays_old[index][end] - Xarrays_old[index][1]),L)
-    Lliquidslug_new_left =  mod((Xpnew[index][end] - Xpnew[index][1]),L) 
-    Lliquidslug_new_right = mod((Xpnew[index+1][end] - Xpnew[index+1][1]),L) 
+    Lliquidslug_new_left =  mod((Xpnew[index][end] - Xpnew[index][1]),L)
+    Lliquidslug_new_right = mod((Xpnew[index+1][end] - Xpnew[index+1][1]),L)
 
     arrayindex = ceil.(Int, Nold * Lliquidslug_new_left / (Lliquidslug_new_left + Lliquidslug_new_right))
     arrayindex = (arrayindex != 1) ? arrayindex : 2
@@ -276,7 +307,7 @@ function getnewXθarrays(index,Xpnew,Xarrays_old,θarrays_old,L,maxindex,maxvalu
             Xarraysnew[maxindex] = constructoneXarray(Xpnew[maxindex],length(Xarraysnew[maxindex]),L)
         elseif maxvalue_type == 1
             Xarraysnew[maxindex_minus] = constructoneXarray(Xpnew[maxindex_minus],length(Xarraysnew[maxindex_minus]),L)
-        else 
+        else
             println("error in liquid merging, maxvalue_type is not 1,2,3")
         end
     end
@@ -306,20 +337,9 @@ if !closedornot
         end
     end
 end
-# println((Xvapornew[2]+Xvapornew[1])/2)
-# println(Xp)
-        return NaN
+
+    return NaN
 end
-
-# function getarrayindex(X,Xarray)
-
-# for arrayindex = 1:length(Xarray)
-#     if (X >= Xarray[arrayindex] && X <= Xarray[arrayindex+1]) || (X >= Xarray[arrayindex] && Xarray[arrayindex] >= Xarray[arrayindex+1]) || (X <= Xarray[arrayindex+1] && Xarray[arrayindex] >= Xarray[arrayindex+1])
-#         return (arrayindex > 1.1) ? arrayindex : 2
-# end
-#     end
-#         return NaN
-# end
 
 function getnewXp(Xp,index,Xvapornew,Lliquid_adjust,L,closedornot)
 
@@ -337,22 +357,6 @@ function getnewXp(Xp,index,Xvapornew,Lliquid_adjust,L,closedornot)
     return Xpnew
 end
 
-# # simplified non mass conservation
-# function getnewXp(Xp,index,Xvapornew,L)
-
-#     Xpnew = deepcopy(Xp)
-
-#     insertXp1=mod.((Xp[index][1],Xvapornew[1]),L)
-#     insertXp2=mod.((Xvapornew[2],Xp[index][2]),L)
-
-#     splice!(Xpnew, index)
-#     insert!(Xpnew, index,insertXp1)
-#     insert!(Xpnew, index+1,insertXp2)
-
-#     return Xpnew
-# end
-
-
 function getnewM(M,index,Minsert,closedornot)
 
     Mnew = deepcopy(M)
@@ -363,42 +367,24 @@ function getnewM(M,index,Minsert,closedornot)
 end
 
 
-function getsuperheat(Xstation,sys)
+function getsuperheat(Xstation,sys::UniformPhpSystem)
     @unpack PtoT = sys.propconvert
     Δθ = sys.mapping.θ_interp_walltoliquid(Xstation) - PtoT(sys.mapping.P_interp_liquidtowall(Xstation))
     return Δθ
 end
 
-
-# ```
-#     get the index of element of Xarray closest to X.
-#     closed loop considered
-# ```
-# function getoneXarrayindex(X,Xarray)
-#     for i = 1:length(Xarray)
-#         if (Xarray[i] >= Xarray[i+1]) && ((Xarray[i] <= X) || (Xarray[i+1] >= X))
-#             return i
-#         end
-#         if (X >= Xarray[i] && X <= Xarray[i+1])
-#             return i
-#         end
-#     end
-
-#     return length(Xarray)
-# end
-
-function suitable_for_boiling(p,i)
-    suitable_flag =  true
+function is_there_space_for_new_bubble(p::UniformPhpSystem,i)
+    suitable_flag = true
     L_newbubble = p.wall.L_newbubble
 
-        index = getinsertindex(p.liquid.Xp,p.wall.Xstations[i],p.tube.L,p.tube.closedornot)
+    index = getinsertindex(_ξp(p),p.wall.Xstations[i],p.tube.L,p.tube.closedornot)
 
-        L_liquid_left =  mod(p.wall.Xstations[i] - p.liquid.Xp[index][1],p.tube.L)
-        L_liquid_right = mod(p.liquid.Xp[index][2] - p.wall.Xstations[i],p.tube.L)
+    L_liquid_left =  mod(p.wall.Xstations[i] - _ξp(p)[index][1],p.tube.L)
+    L_liquid_right = mod(_ξp(p)[index][2] - p.wall.Xstations[i],p.tube.L)
 
-        if (2*L_newbubble> L_liquid_left) || (2*L_newbubble > L_liquid_right)
-            suitable_flag = false
-        end
+    if (2*L_newbubble> L_liquid_left) || (2*L_newbubble > L_liquid_right)
+        suitable_flag = false
+    end
 
     return suitable_flag
 end
@@ -414,11 +400,8 @@ function get_liquid_energy(sys0::UniformPhpSystem)
     ρ = sys0.liquid.ρₗ
     Cp = sys0.liquid.Cpₗ
     L = sys0.tube.L
-    sys0.liquid.Xarrays;
-    ds_liquid = [mod(Xarray[end]-Xarray[1],L)/length(Xarray) for Xarray in sys0.liquid.Xarrays];
-    # println(sys0.liquid.Xp)
-    # println(ds_liquid)
+    sys0.liquid.ξarrays;
+    ds_liquid = [mod(Xarray[end]-Xarray[1],L)/length(Xarray) for Xarray in sys0.liquid.ξarrays];
     liquid_energy = sum.(sys0.liquid.θarrays).*ds_liquid .* (Ac .* ρ .* Cp)
-    # println(liquid_energy)
     sum(liquid_energy)
 end

@@ -2,7 +2,7 @@ export vaporMergingAffect!,vaporMergingCondition,vaporMerging
 
 function vaporMergingAffect!(integrator)
 
-    p = deepcopy(getcurrentsys_nowall!(integrator.u,integrator.p));
+    p = deepcopy(getcurrentsys_nowall!(integrator.u,_reject_nonuniform(integrator.p)));
     δv = DEFAULT_VAPOR_MERGE_FRAC*p.wall.L_newbubble
 
 
@@ -31,60 +31,50 @@ end
 
 function vaporMergingCondition(u,t,integrator)     # only for closed loop tube
 
-    sys = getcurrentsys_nowall!(integrator.u,integrator.p);
+    sys = getcurrentsys_nowall!(integrator.u,_reject_nonuniform(integrator.p));
     δv = DEFAULT_VAPOR_MERGE_FRAC*sys.wall.L_newbubble
     merge_flags = getVaporMergeFlags(δv,sys)
 
     return sum(merge_flags) != 0
-    # return true
 end
 
-function vaporMerging(p,i)
+function vaporMerging(p::UniformPhpSystem,i)
+    Xp = _ξp(p)
 
     Ac = p.tube.Ac
     ρₗ = p.liquid.ρₗ
-
-    # get the total mass before merging
     Mvapor_old = getMvapor(p);
     Mfilm_old = sum(getMfilm(p));
     Mliquid_old = getMliquid(p);
-    
+
     Mold = sum(Mvapor_old + Mfilm_old + Mliquid_old)
-
-
-    # get the liquid interface velocities and lengthes for merging
-    Lliquidslug_old = ξ_to_liquid_length(first.(p.liquid.Xp), last.(p.liquid.Xp), p.tube.L)
-    Lvaporplug =  ξ_to_vapor_length(first.(p.liquid.Xp), last.(p.liquid.Xp),p.tube.L,p.tube.closedornot)
-
-
-# get compensated L of merged liquid slug for mass conservation
+    Lliquidslug_old = ξ_to_liquid_length(first.(Xp), last.(Xp), p.tube.L)
+    Lvaporplug =  ξ_to_vapor_length(first.(Xp), last.(Xp),p.tube.L,p.tube.closedornot)
     left_index_after = [length(Lvaporplug)-1;1:(length(Lvaporplug)-1)]
     right_index_after = [1:length(Lvaporplug)-1;1]
     right_index = [2:length(Lvaporplug);1]
 
 
     systemp = deepcopy(p)
-
-# delete ith liquid slug
-    splice!(systemp.liquid.Xp,i)
-    splice!(systemp.liquid.dXdt,i)
-    splice!(systemp.liquid.Xarrays,i)
+    Xpnew = _ξp(systemp)
+    splice!(Xpnew,i)
+    _set_ξp!(systemp, Xpnew)
+    splice!(systemp.liquid.Q_B,i)
+    splice!(systemp.liquid.ξarrays,i)
     splice!(systemp.liquid.θarrays,i)
 
 
-    if i != length(p.liquid.Xp)
+    if i != length(Xp)
         splice!(systemp.vapor.Af_L,right_index[i])
         splice!(systemp.vapor.Af_R,i)
         splice!(systemp.vapor.Lfilm_start,right_index[i])
-        splice!(systemp.vapor.Lfilm_end,i)    
+        splice!(systemp.vapor.Lfilm_end,i)
         splice!(systemp.vapor.P,i:i+1,[(systemp.vapor.P[i]+systemp.vapor.P[right_index[i]])/2])
 
         else
-            # splice!(systemp.vapor.Af_L,right_index[i])
             splice!(systemp.vapor.Af_R,i)
-            # splice!(systemp.vapor.Lfilm_start,right_index[i])
-            splice!(systemp.vapor.Lfilm_end,i)   
-            
+            splice!(systemp.vapor.Lfilm_end,i)
+
             splice!(systemp.vapor.Af_L,length(systemp.vapor.Af_L));
             splice!(systemp.vapor.Af_L,1);
             insert!(systemp.vapor.Af_L,1,p.vapor.Af_L[end])
@@ -97,20 +87,13 @@ function vaporMerging(p,i)
             splice!(systemp.vapor.P,1);
             insert!(systemp.vapor.P,1,(p.vapor.P[i]+p.vapor.P[right_index[i]])/2)
         end
-    
-    # get the total mass after deleting liquid slugs merging
     Mvapor_temp = getMvapor(systemp);
     Mfilm_temp = sum(getMfilm(systemp));
     Mliquid_temp = getMliquid(systemp);
-        
+
     Mtemp = sum(Mvapor_temp + Mfilm_temp + Mliquid_temp)
 
     Mdiff = Mold - Mtemp
-
-
-    # println(sum(Mdiff))
-    # println(sum(Mold))
-    # println(sum(Mtemp))
 
     @unpack PtoD = p.propconvert
     A = (Mdiff / Ac / (ρₗ - PtoD(systemp.vapor.P[right_index_after[i]])))
@@ -118,33 +101,23 @@ function vaporMerging(p,i)
 
     L_lengthen =  A < B ? A : B
 
-    Xp_new = deepcopy(systemp.liquid.Xp)
+    Xp_new = _ξp(systemp)
 
     Xp_new[right_index_after[i]] = (Xp_new[right_index_after[i]][1] - L_lengthen/2,Xp_new[right_index_after[i]][2])
     Xp_new[left_index_after[i]] = (Xp_new[left_index_after[i]][1],Xp_new[left_index_after[i]][2] + L_lengthen/2)
 
-    systemp.liquid.Xp = Xp_new
-
-    # println(L_lengthen)
-    # println(A)
-    # println(Mdiff)
+    _set_ξp!(systemp, Xp_new)
+    systemp.liquid.ξarrays = updateXarrays(Xp_new, systemp.liquid.θarrays, systemp.tube.L)
 
     return deepcopy(systemp)
 end
 
-function getVaporMergeFlags(δv,sys)
-
-    # only for closed loop tube
-    numofliquidslug = length(sys.liquid.Xp)
+function getVaporMergeFlags(δv::Real,sys::UniformPhpSystem)
+    numofliquidslug = length(_ξp(sys))
     numofmergingsite = numofliquidslug
     merge_flags = Array{Bool,1}(undef, numofmergingsite)
-
-# println(numofliquidslug)
-
-    # Xpvapor = getXpvapor(sys.liquid.Xp,sys.tube.L,sys.tube.closedornot)
-    Xp = sys.liquid.Xp
+    Xp = _ξp(sys)
     for i in 1:numofmergingsite
-     # merging bubble length threshold
         merge_flags[i] = ((Xp[i][2] - Xp[i][1]) < δv && (Xp[i][2] - Xp[i][1]) >= 0) || ((Xp[i][2] - Xp[i][1] + sys.tube.L) < δv && (Xp[i][2] - Xp[i][1]) < 0) ? true : false
     end
 

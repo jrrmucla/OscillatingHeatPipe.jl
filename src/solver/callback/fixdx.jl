@@ -7,14 +7,12 @@ export fixdx_affect!,fixdx_condition
 
 function fixdx_condition(u,t,integrator)
 
-        p = getcurrentsys_nowall!(integrator.u,integrator.p);
+        p = getcurrentsys_nowall!(integrator.u,_reject_nonuniform(integrator.p));
 
         dξ_init = p.tube.L / p.tube.N
 
         δξmax = 2*dξ_init
         δξmin = 0.5*dξ_init
-
-        # sys = deepcopy(getcurrentsys_nowall!(integrator.u,integrator.p));
 
         ReconstructFlags = getReconstructFlags(δξmin,δξmax,p)
 
@@ -32,7 +30,7 @@ function getReconstructFlags(δξmin::Real,δξmax::Real,p::UniformPhpSystem)
     ξarrays = p.liquid.ξarrays
 
     for i in 1:numofliquidslug
-        # Mark the internal conduction points of the i-th slug for reconstruction if 
+        # Mark the internal conduction points of the i-th slug for reconstruction if
         # a) grid spacing is less than a minimum value
         # b) grid spacing is greater than a maximum value
         ReconstructFlags[i] = mod((ξarrays[i][2] - ξarrays[i][1]),L) < δξmin || mod((ξarrays[i][2] - ξarrays[i][1]),L) > δξmax
@@ -42,10 +40,7 @@ function getReconstructFlags(δξmin::Real,δξmax::Real,p::UniformPhpSystem)
 end
 
 function fixdx_affect!(integrator)
-    p = deepcopy(getcurrentsys_nowall!(integrator.u,integrator.p));
-
-    # support for nonuniform later
-    @assert p isa UniformPhpSystem
+    p = deepcopy(getcurrentsys_nowall!(integrator.u,_reject_nonuniform(integrator.p)));
 
     L = p.tube.L
 
@@ -54,7 +49,7 @@ function fixdx_affect!(integrator)
     δξmax = 2*dξ_init
     δξmin = 0.5*dξ_init
 
-    sys = deepcopy(getcurrentsys_nowall!(integrator.u,integrator.p));
+    sys = deepcopy(getcurrentsys_nowall!(integrator.u,_reject_nonuniform(integrator.p)));
 
     ReconstructFlags = getReconstructFlags(δξmin,δξmax,p)
     indexReconstructSite = sort(findall(x->x == true, ReconstructFlags),rev = true)
@@ -73,7 +68,7 @@ function fixdx_affect!(integrator)
         p.liquid.ξarrays[i] = constructoneXarray((p.liquid.ξarrays[i][1],p.liquid.ξarrays[i][end]),Nliquid[i],L)
         p.liquid.θarrays[i] = θ_interp_liquidtowall(p.liquid.ξarrays[i])
     end
-    
+
     Af_L = p.vapor.Af_L
     Af_R = p.vapor.Af_R
     Lfilm_start = p.vapor.Lfilm_start
