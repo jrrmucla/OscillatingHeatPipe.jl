@@ -5,7 +5,7 @@ export Af_at_interfaces
     Returns `(Af_left, Af_right)`, with one area per liquid slug on each side.
     This can vary by interface due to varying geometry and direction of travel.
 """
-function Af_at_interfaces(sys::Union{UniformPhpSystem, VariableAreaPhpSystem}, liquid_ξs_left, liquid_ξs_right, liquid_char_velocity)
+function Af_at_interfaces(sys::Union{UniformPhpSystem, VariablePhpSystem}, liquid_ξs_left, liquid_ξs_right, liquid_char_velocity)
     @unpack Q_B = sys.liquid
     @unpack Af_L, Af_R = sys.vapor
 
@@ -31,7 +31,7 @@ function Af_at_interfaces(sys::Union{UniformPhpSystem, VariableAreaPhpSystem}, l
     return Af_left, Af_right
 end
 
-function δf_new_at_interfaces(sys::Union{UniformPhpSystem, VariableAreaPhpSystem}, liquid_ξs_left, liquid_ξs_right, liquid_char_velocity)
+function δf_new_at_interfaces(sys::Union{UniformPhpSystem, VariablePhpSystem}, liquid_ξs_left, liquid_ξs_right, liquid_char_velocity)
     @unpack μₗ, σ = sys.liquid
     mean_char_velocity = mean(abs.(liquid_char_velocity))
     Ca_mean = getCa.(μₗ, σ, mean_char_velocity)

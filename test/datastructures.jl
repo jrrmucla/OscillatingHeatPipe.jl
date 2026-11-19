@@ -1,7 +1,6 @@
 using Statistics
 using Test
 using OscillatingHeatPipe
-# needs update for new liquid / state vector
 
 @testset "Liquid and Vapor arrays" begin
     L, Lmin, ϕ0 = 4.0 + rand(), 0.001, 0.6 + 0.1*rand()
@@ -11,9 +10,10 @@ using OscillatingHeatPipe
 
         # if this is a closed case, then shift it so that the last
         # slug crosses the line. Ensures more robust testing
-        xshift = closedornot ? L - mean(ξ_LR[end]) : 0.0
-        ξ_L = mod(ξ_L + xshift, L);
-        ξ_R = mod(ξ_R + xshift, L);
+        xshift = closedornot ? L - (ξ_L[end] + ξ_R[end]) / 2 : 0.0
+        ξ_L = mod.(ξ_L .+ xshift, L);
+        ξ_R = mod.(ξ_R .+ xshift, L);
+        ξ_LR = collect(zip(ξ_L, ξ_R));
 
         liquid_length = mod.(ξ_R - ξ_L, L)
         @test all(liquid_length .> 0)
@@ -63,8 +63,10 @@ sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
     Af_L = sys_tube.vapor.Af_L
     Af_R = sys_tube.vapor.Af_R
     Q_B = sys_tube.liquid.Q_B
+    ξ_L = sys_tube.liquid.ζ_L ./ sys_tube.tube.Ac
+    ξ_R = sys_tube.liquid.ζ_R ./ sys_tube.tube.Ac
 
-    # Each moving interface below gives a mean slug speed of 0.05.
+    # Moving slugs below have a bulk speed of 0.05 m/s.
     Ca = getCa(sys_tube.liquid.μₗ,sys_tube.liquid.σ,0.05)
     δdep = Catoδ(d,Ca,adjust_factor=sys_tube.vapor.ad_fac)
 
@@ -75,21 +77,21 @@ sys_tube = initialize_ohpsys(sys_plate,p_fluid,power)
     @test all(Af_R .> 0)
 
     # No slugs are moving. Should only be equal to existing films
-    Adep = Af_at_interfaces(sys_tube)
-    @test all(map((u,v) -> u[1]==v,Adep,δarea_end))
-    @test all(map((u,v) -> u[2]==v,Adep,circshift(δarea_start,-1)))
+    Adep_left, Adep_right = Af_at_interfaces(sys_tube, ξ_L, ξ_R, Q_B ./ sys_tube.tube.Ac)
+    @test Adep_left == δarea_end
+    @test Adep_right == circshift(δarea_start,-1)
 
     # Left slug interfaces are advancing. Should be equal to deposited film
-    Q_B .= fill(-0.1,length(Q_B))
-    Adep = Af_at_interfaces(sys_tube)
-    @test all(map(u -> u[1]≈δarea_dep,Adep))
-    @test all(map((u,v) -> u[2]==v,Adep,circshift(δarea_start,-1)))
+    Q_B .= 0.05 * sys_tube.tube.Ac
+    Adep_left, Adep_right = Af_at_interfaces(sys_tube, ξ_L, ξ_R, Q_B ./ sys_tube.tube.Ac)
+    @test all(x -> x ≈ δarea_dep, Adep_left)
+    @test Adep_right == circshift(δarea_start,-1)
 
     # Right slug interfaces are advancing. Should be equal to deposited film
-    Q_B .= fill(-0.1,length(Q_B))
-    Adep = Af_at_interfaces(sys_tube)
-    @test all(map((u,v) -> u[1]==v,Adep,δarea_end))
-    @test all(map(u -> u[2]≈δarea_dep,Adep))
+    Q_B .= -0.05 * sys_tube.tube.Ac
+    Adep_left, Adep_right = Af_at_interfaces(sys_tube, ξ_L, ξ_R, Q_B ./ sys_tube.tube.Ac)
+    @test Adep_left == δarea_end
+    @test all(x -> x ≈ δarea_dep, Adep_right)
 
     vol = get_vapor_volume(sys_tube)
     @test all(vol .> 0)
@@ -97,7 +99,7 @@ end
 
 
 @testset "Mass Calculation Helpers (Uniform Channel)" begin
-    numofslugs = length(sys_tube.liquid.Xp)
+    numofslugs = length(sys_tube.liquid.Q_B)
 
     sys_tube.vapor.Af_L .= sys_tube.tube.Pc .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
     sys_tube.vapor.Af_R .= sys_tube.tube.Pc .* (zeros(numofslugs) .+ 1e-5 .+ 1e-5 .* rand(numofslugs) ) # initial film area
@@ -107,8 +109,7 @@ end
     Af_R = sys_tube.vapor.Af_R
     Lfilm_start = sys_tube.vapor.Lfilm_start
     Lfilm_end = sys_tube.vapor.Lfilm_end
-    Xp = sys_tube.liquid.Xp
-    dXdt = sys_tube.liquid.dXdt
+    Xp = OscillatingHeatPipe._ξp(sys_tube)
     Ac = sys_tube.tube.Ac
     L = sys_tube.tube.L
     ρₗ = sys_tube.liquid.ρₗ

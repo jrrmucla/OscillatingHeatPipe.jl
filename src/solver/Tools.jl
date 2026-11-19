@@ -4,6 +4,9 @@ export getgvec,getgh,delta, # get actrual heightg of the tube
 Hfilm,getδarea,getδFromδarea,getMvapor,getMfilm,getMliquid,getMtotal,getchargeratio,get_vapor_volume,
 getCa,f_churchill,Catoδ,RntoΔT,systoM
 
+# typing of NamedTuple as an alternative to AbstractPHP
+# is to allow for unit tests with minimal PHP-like tuples
+
 function getgvec(g0::T,g_angle::T=3/2*π) where {T<:Real}
     g = g0*[cos(g_angle),sin(g_angle)]
 end
@@ -209,7 +212,7 @@ end
 
 Return the heat transfer coefficient for the film with thickness `δfilm`
 """
-Hfilm(δfilm,sys::AbstractPHP) = Hfilm(δfilm,sys.vapor)
+Hfilm(δfilm,sys::Union{AbstractPHP, NamedTuple}) = Hfilm(δfilm,sys.vapor)
 
 function Hfilm(δfilm,vapor::Vapor)
     @unpack δmin,k,Hᵥ  = vapor
@@ -256,7 +259,7 @@ getδFromδarea(Ac,d,δarea) = (d / 2) * (δarea / Ac) / (1 + sqrt(1 - δarea / 
 """
 Return the masses of all of the vapor,liquid, and film regions
 """
-function getMtotal(sys::AbstractPHP)
+function getMtotal(sys::Union{AbstractPHP, NamedTuple})
     return sum(getMvapor(sys)) + sum(getMliquid(sys)) + sum(sum(getMfilm(sys)))
 end
 
@@ -268,7 +271,7 @@ Return the chargeratio considering all of the vapor,liquid, and film regions
 TODO: this isn't consistent with initialization scheme
 and it looks like initialization is in the wrong
 """
-function getchargeratio(sys::AbstractPHP)
+function getchargeratio(sys::Union{AbstractPHP, NamedTuple})
     Mtotal = getMtotal(sys)
     @unpack ρₗ = sys.liquid # get the liquid density
     Vtotal = _tube_volume(sys.tube)
@@ -281,7 +284,7 @@ end
 
 Return the masses of all of the vapor regions
 """
-function getMvapor(sys::AbstractPHP)
+function getMvapor(sys::Union{AbstractPHP, NamedTuple})
 
     @unpack propconvert, vapor = sys
     @unpack PtoD = propconvert
@@ -299,7 +302,7 @@ end
 
 Return the volumes of the vapor regions, given the tube system `sys`.
 """
-function get_vapor_volume(sys::AbstractPHP)
+function get_vapor_volume(sys::Union{AbstractPHP, NamedTuple})
     @unpack tube, vapor, liquid = sys
     @unpack Af_L, Af_R, Lfilm_start, Lfilm_end = vapor
     @unpack ζ_L, ζ_R = liquid
@@ -310,7 +313,7 @@ end
 """
 Return the masses of all of the liquid films in the system.
 """
-function getMfilm(sys::AbstractPHP)
+function getMfilm(sys::Union{AbstractPHP, NamedTuple})
     @unpack tube, vapor, liquid = sys
     @unpack Af_L, Af_R, Lfilm_start, Lfilm_end = vapor
     @unpack ρₗ = liquid
@@ -321,7 +324,7 @@ end
 """
 Return the masses of all of the liquid slugs in the system.
 """
-function getMliquid(sys::AbstractPHP)
+function getMliquid(sys::Union{AbstractPHP, NamedTuple})
     @unpack tube, liquid = sys
     @unpack ρₗ, ζ_L, ζ_R = liquid
     volumes = tube.closedornot ? ζ_to_liquid_volume(ζ_L, ζ_R, _tube_volume(tube)) : ζ_R - ζ_L

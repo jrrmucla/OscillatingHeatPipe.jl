@@ -1,7 +1,6 @@
 using Test
 using Interpolations
 using OscillatingHeatPipe
-# needs update for new liquid / state vector
 
 @testset "Film interface areas: constant geometry" begin
     ohp = OscillatingHeatPipe
@@ -20,15 +19,15 @@ using OscillatingHeatPipe
         variable_tube = ohp.VariableTube([0.0, 0.5, 1.0], fill(diameter, 3),
             fill(perimeter, 3), fill(area, 3), [0.0, 0.0], closed, 10)
 
-        # Cover deposition, existing films, zero velocity, and independent interface signs.
+        # Cover deposition, existing films, zero velocity, and mixed bulk-flow signs.
         for (motion, velocities) in (
-            ("positive", fill((0.02, 0.02), 5)),
-            ("negative", fill((-0.02, -0.02), 5)),
-            ("stationary", fill((0.0, 0.0), 5)),
-            ("mixed", [(0.02, -0.01), (-0.03, 0.01), (0.0, 0.02),
-                       (0.01, 0.0), (-0.02, -0.03)]))
+            ("positive", fill(0.02, 5)),
+            ("negative", fill(-0.02, 5)),
+            ("stationary", fill(0.0, 5)),
+            ("mixed", [0.02, -0.03, 0.0, 0.01, -0.02]))
             liquid = Liquid(1.0, 600.0, 2000.0, 1e-7, 1e-4, 0.02,
-                copy(positions), copy(velocities), [collect(x) for x in positions],
+                area .* first.(positions), area .* last.(positions), area .* velocities,
+                [collect(x) for x in positions],
                 [zeros(2) for _ in positions])
             # Distinct film areas expose left/right and vapor-index mistakes.
             vapor = Vapor(k=0.1, P=fill(1e5, nvapor),
@@ -39,10 +38,10 @@ using OscillatingHeatPipe
             variable_mapping = Mapping(ntuple(_ -> placeholder, 6)...)
             uniform = UniformPhpSystem(uniform_tube, liquid, vapor, wall, properties,
                                        uniform_mapping, Cache(Any[], 0.0))
-            variable = ohp.VariableAreaPhpSystem(variable_tube, liquid, vapor, wall,
+            variable = ohp.VariablePhpSystem(variable_tube, liquid, vapor, wall,
                 properties, variable_mapping, Cache(Any[], 0.0))
 
-            speed = sum(abs((v[1] + v[2]) / 2) for v in velocities) / length(velocities)
+            speed = sum(abs, velocities) / length(velocities)
             thickness = Catoδ(diameter, getCa(liquid.μₗ, liquid.σ, speed);
                               adjust_factor=vapor.ad_fac)
             deposition = area * (1 - (1 - 2thickness / diameter)^2)
@@ -52,18 +51,20 @@ using OscillatingHeatPipe
                 left_vapor = closed ? i : i - 1
                 right_vapor = closed ? mod1(i + 1, nvapor) : i
                 expected[i] = (
-                    velocities[i][1] > 0 ? deposition : vapor.Af_R[left_vapor],
-                    velocities[i][2] < 0 ? deposition : vapor.Af_L[right_vapor])
+                    velocities[i] > 0 ? deposition : vapor.Af_R[left_vapor],
+                    velocities[i] < 0 ? deposition : vapor.Af_L[right_vapor])
             end
             @testset "closed=$closed, motion=$motion" begin
                 for (kind, sys) in (("uniform", uniform), ("variable", variable))
                     @testset "$kind" begin
-                        actual = ohp.Af_at_interfaces(sys)
-                        @test length(actual) == length(expected)
-                        @test all(isapprox.(first.(actual), first.(expected)))
-                        @test all(isapprox.(last.(actual), last.(expected)))
+                        actual_left, actual_right = ohp.Af_at_interfaces(
+                            sys, first.(positions), last.(positions), velocities)
+                        @test length(actual_left) == length(actual_right) == length(expected)
+                        @test all(isapprox.(actual_left, first.(expected)))
+                        @test all(isapprox.(actual_right, last.(expected)))
                         if !closed
-                            @test first(actual) == last(actual) == (0.0, 0.0)
+                            @test (first(actual_left), first(actual_right)) ==
+                                  (last(actual_left), last(actual_right)) == (0.0, 0.0)
                         end
                     end
                 end

@@ -138,7 +138,7 @@ end
 """
 This oscillating heat pipe system supports area changes along the ξ direction.
 """
-mutable struct VariableAreaPhpSystem <: AbstractPHP
+mutable struct VariablePhpSystem <: AbstractPHP
     tube    ::VariableTube
     liquid  ::Liquid
     vapor   ::Vapor

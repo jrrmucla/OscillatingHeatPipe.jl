@@ -121,7 +121,8 @@ end
 function getwetness(sysfinal)
     wetness = Float64[]
     for sysfinali in sysfinal
-        Lvaporplug = ξ_to_vapor_length(first.(sysfinali.liquid.Xp), last.(sysfinali.liquid.Xp),sysfinali.tube.L,sysfinali.tube.closedornot)
+        Xp = _ξp(sysfinali)
+        Lvaporplug = ξ_to_vapor_length(first.(Xp), last.(Xp),sysfinali.tube.L,sysfinali.tube.closedornot)
         Lvaporsum = sum(Lvaporplug)
         Ldryvapor = Lvaporplug - sysfinali.vapor.Lfilm_start  - sysfinali.vapor.Lfilm_end
         Ldrysum = sum(Ldryvapor)
@@ -139,7 +140,7 @@ function getV(sysfinal)
 
     for sysfinali in sysfinal
     
-        V = [elem[2] for elem in sysfinali.liquid.dXdt]
+        V = sysfinali.liquid.Q_B ./ sysfinali.tube.Ac
         Vabs = mean(abs.(V))
         Vmax = maximum(abs.(V))
         Vrealavg = mean(V)
@@ -160,7 +161,7 @@ function getδ(sysfinal)
         Af_L = sysfinali.vapor.Af_L
         Af_R = sysfinali.vapor.Af_R
 
-        interfaces = getXpvapor(sysfinali.liquid.Xp, sysfinali.tube.closedornot)
+        interfaces = getXpvapor(_ξp(sysfinali), sysfinali.tube.closedornot)
         push!(δ_avg_start, mean(_film_thickness(sysfinali, Af_L, first.(interfaces))))
         push!(δ_avg_end, mean(_film_thickness(sysfinali, Af_R, last.(interfaces))))
     end

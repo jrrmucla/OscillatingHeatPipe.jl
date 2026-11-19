@@ -1,6 +1,5 @@
 using Statistics
 using JLD2
-# needs update for new liquid / state vector
 
 heaviside(x::AbstractFloat) = ifelse(x < 0, zero(x), ifelse(x > 0, one(x), oftype(x,0.0)))
 
@@ -20,7 +19,7 @@ using OscillatingHeatPipe # our main package
     L_newbubble= sys_tube.wall.L_newbubble
     L = sys_tube.tube.L
 
-    Xp_old = sys_tube.liquid.Xp
+    Xp_old = OscillatingHeatPipe._ξp(sys_tube)
     Xp_new = deepcopy(Xp_old)
 
     dXp = mod(Xp_new[2][1] - Xp_new[1][end],L) - 0.8*OscillatingHeatPipe.DEFAULT_LIQUID_MERGE_FRAC*L_newbubble
@@ -34,7 +33,7 @@ using OscillatingHeatPipe # our main package
     Lfilm_start[2] = A_SMALL_FRAC*L_newbubble
     Lfilm_end[2] = A_SMALL_FRAC*L_newbubble
 
-    sys_tube.liquid.Xp = deepcopy(Xp_new)
+    OscillatingHeatPipe._set_ξp!(sys_tube, Xp_new)
     sys_tube.vapor.Lfilm_start = deepcopy(Lfilm_start)
     sys_tube.vapor.Lfilm_end = deepcopy(Lfilm_end)
 
@@ -42,7 +41,7 @@ using OscillatingHeatPipe # our main package
     integrator_tube_2 = init(u_tube_2,tspan,deepcopy(sys_tube)); # construct integrator_tube
     @test merging_condition(integrator_tube_2.u,integrator_tube_2.t,integrator_tube_2) == true
 
-    # println("Before modifying Xp: ", sys_tube.liquid.Xp)
+    # println("Before modifying Xp: ", OscillatingHeatPipe._ξp(sys_tube))
     # println("After modifying Xp: ", Xp_new)
 
     #   ### combine inner tube and plate together
@@ -56,7 +55,7 @@ using OscillatingHeatPipe # our main package
     SimuResult = SimulationResult(integrator_tube,integrator_plate);
 
 
-    # println(integrator_tube.p.liquid.Xp)
+    # println(OscillatingHeatPipe._ξp(integrator_tube.p))
 
 
     p_old = deepcopy(integrator_tube.p)
@@ -70,15 +69,15 @@ using OscillatingHeatPipe # our main package
 
     p_new = deepcopy(integrator_tube.p)
 
-    @test length(p_new.liquid.Xp) == length(p_old.liquid.Xp) - 1
-    @test isapprox(sum(ξ_to_liquid_length(first.(p_new.liquid.Xp), last.(p_new.liquid.Xp), p_new.tube.L)), sum(ξ_to_liquid_length(first.(p_old.liquid.Xp), last.(p_old.liquid.Xp), p_old.tube.L)), rtol=2e-3)
-    @test p_new.liquid.Xp[2:end] == p_old.liquid.Xp[3:end]
-    @test p_new.liquid.dXdt[2:end] == p_old.liquid.dXdt[3:end]
+    @test length(OscillatingHeatPipe._ξp(p_new)) == length(OscillatingHeatPipe._ξp(p_old)) - 1
+    @test isapprox(sum(ξ_to_liquid_length(first.(OscillatingHeatPipe._ξp(p_new)), last.(OscillatingHeatPipe._ξp(p_new)), p_new.tube.L)), sum(ξ_to_liquid_length(first.(OscillatingHeatPipe._ξp(p_old)), last.(OscillatingHeatPipe._ξp(p_old)), p_old.tube.L)), rtol=2e-3)
+    @test OscillatingHeatPipe._ξp(p_new)[2:end] == OscillatingHeatPipe._ξp(p_old)[3:end]
+    @test p_new.liquid.Q_B[2:end] == p_old.liquid.Q_B[3:end]
 
 
-    L_liquidslug_old = ξ_to_liquid_length(first.(p_old.liquid.Xp), last.(p_old.liquid.Xp), p_old.tube.L)
-    L_liquidslug_new = ξ_to_liquid_length(first.(p_new.liquid.Xp), last.(p_new.liquid.Xp), p_new.tube.L)
-    @test p_new.liquid.dXdt[1][1] ≈ (p_old.liquid.dXdt[1][1] * L_liquidslug_old[1] + p_old.liquid.dXdt[2][1] * L_liquidslug_old[2])/(L_liquidslug_old[1]+L_liquidslug_old[2]) 
+    L_liquidslug_old = ξ_to_liquid_length(first.(OscillatingHeatPipe._ξp(p_old)), last.(OscillatingHeatPipe._ξp(p_old)), p_old.tube.L)
+    L_liquidslug_new = ξ_to_liquid_length(first.(OscillatingHeatPipe._ξp(p_new)), last.(OscillatingHeatPipe._ξp(p_new)), p_new.tube.L)
+    @test p_new.liquid.Q_B[1] ≈ (p_old.liquid.Q_B[1] * L_liquidslug_old[1] + p_old.liquid.Q_B[2] * L_liquidslug_old[2])/(L_liquidslug_old[1]+L_liquidslug_old[2])
 
     Mvapor_new = sum(getMvapor(p_new))
     Mfilm_new = sum(sum.(getMfilm(p_new)))
@@ -106,7 +105,7 @@ end
     sys_tube = initialize_ohpsys(sys_plate,p_fluid,power,slugnum=numofslugs,nucleatenum=2,
         boil_waiting_time=1e-2)
 
-    Xp = sys_tube.liquid.Xp
+    Xp = OscillatingHeatPipe._ξp(sys_tube)
     L = sys_tube.tube.L
 
     Xp1_mid = mod(Xp[1][1] + mod((Xp[1][2]- Xp[1][1]),L)/2,L)
@@ -165,7 +164,7 @@ end
     boiling_affect!(integrator_tube)
     getcurrentsys_nowall!(integrator_tube.u,integrator_tube.p)
 
-    @test integrator_tube.p.liquid.Xp == sys_tube.liquid.Xp
+    @test OscillatingHeatPipe._ξp(integrator_tube.p) == OscillatingHeatPipe._ξp(sys_tube)
 
     integrator_tube.t = integrator_tube.p.wall.boil_interval + tstep
 
@@ -177,7 +176,7 @@ end
     boiling_affect!(integrator_tube)
     getcurrentsys_nowall!(integrator_tube.u,integrator_tube.p)
 
-    @test length(integrator_tube.p.liquid.Xp) == length(sys_tube.liquid.Xp) + 1
+    @test length(OscillatingHeatPipe._ξp(integrator_tube.p)) == length(OscillatingHeatPipe._ξp(sys_tube)) + 1
 
 
     p_new = deepcopy(integrator_tube.p)
@@ -196,7 +195,7 @@ end
     boiling_affect!(integrator_tube)
     getcurrentsys_nowall!(integrator_tube.u,integrator_tube.p)
 
-    @test integrator_tube.p.liquid.Xp == sys_tube.liquid.Xp
+    @test OscillatingHeatPipe._ξp(integrator_tube.p) == OscillatingHeatPipe._ξp(sys_tube)
 
 end
 
@@ -219,8 +218,8 @@ integrator_tube = init(u_tube,tspan,deepcopy(sys_tube)); # construct integrator_
 
 @test fixdx_condition(integrator_tube.u,integrator_tube.t,integrator_tube) == false
 
-sys_tube.liquid.Xarrays[1] = OscillatingHeatPipe.constructoneXarray(integrator_tube.p.liquid.Xp[1],3*length(integrator_tube.p.liquid.Xarrays[1]),integrator_tube.p.tube.L)
-sys_tube.liquid.θarrays[1] = sys_tube.liquid.Xarrays[1] .* 0 .+ Tref
+sys_tube.liquid.ξarrays[1] = OscillatingHeatPipe.constructoneXarray(OscillatingHeatPipe._ξp(integrator_tube.p)[1],3*length(integrator_tube.p.liquid.ξarrays[1]),integrator_tube.p.tube.L)
+sys_tube.liquid.θarrays[1] = sys_tube.liquid.ξarrays[1] .* 0 .+ Tref
 u_tube = newstate(sys_tube) # initialize OHP tube 
 integrator_tube = init(u_tube,tspan,deepcopy(sys_tube)); # construct integrator_tube
 
@@ -230,7 +229,7 @@ integrator_tube = init(u_tube,tspan,deepcopy(sys_tube)); # construct integrator_
 fixdx_affect!(integrator_tube)
 getcurrentsys_nowall!(integrator_tube.u,integrator_tube.p)
 
-@test length(integrator_tube.p.liquid.Xarrays[1]) < length(sys_tube.liquid.Xarrays[1])
+@test length(integrator_tube.p.liquid.ξarrays[1]) < length(sys_tube.liquid.ξarrays[1])
 @test fixdx_condition(integrator_tube.u,integrator_tube.t,integrator_tube) == false
 
 end
@@ -254,6 +253,7 @@ integrator_tube = init(u_tube,tspan,deepcopy(sys_tube)); # construct integrator_
 # end
 
 integrator_tube.p.vapor.P = integrator_tube.p.vapor.P + rand(length(integrator_tube.p.vapor.P)) .* 1e3
+integrator_tube.u .= newstate(integrator_tube.p)
 
 
 @test slugbc_condition(integrator_tube.u,integrator_tube.t,integrator_tube) == true # always true
@@ -269,6 +269,9 @@ PtoT = integrator_tube.p.propconvert.PtoT
 
 slugbc_affect!(integrator_tube)
 getcurrentsys_nowall!(integrator_tube.u,integrator_tube.p)
+
+T_first_pt = [x[1] for x in integrator_tube.p.liquid.θarrays]
+T_last_pt = [x[end] for x in integrator_tube.p.liquid.θarrays]
 
 @test isapprox(PtoT.(integrator_tube.p.vapor.P),T_first_pt, rtol=1e-10)
 @test isapprox(PtoT.(integrator_tube.p.vapor.P),circshift(T_last_pt,1), rtol=1e-10)
@@ -294,13 +297,13 @@ end
     L_newbubble= sys_tube.wall.L_newbubble
     L = sys_tube.tube.L
 
-    Xp_old = sys_tube.liquid.Xp
+    Xp_old = OscillatingHeatPipe._ξp(sys_tube)
     Xp_new = deepcopy(Xp_old)
 
     dXp = mod(Xp_new[2][2] - Xp_new[2][1],L) - 1.1*OscillatingHeatPipe.DEFAULT_VAPOR_MERGE_FRAC*L_newbubble
     Xp_new[2] =  (Xp_new[2][1], Xp_new[2][2] - dXp) # make two liquid slugs not close enough to merge
 
-    sys_tube.liquid.Xp = deepcopy(Xp_new)
+    OscillatingHeatPipe._set_ξp!(sys_tube, Xp_new)
 
     u_tube_1 = newstate(sys_tube) # initialize OHP tube 
     integrator_tube_1 = init(u_tube_1,tspan,deepcopy(sys_tube)); # construct integrator_tube
@@ -310,14 +313,14 @@ end
     dXp = mod(Xp_new[2][2] - Xp_new[2][1],L) - 0.9*OscillatingHeatPipe.DEFAULT_VAPOR_MERGE_FRAC*L_newbubble
     Xp_new[2] =  (Xp_new[2][1], Xp_new[2][2] - dXp) # make two liquid slugs close enough to merge
 
-    sys_tube.liquid.Xp = deepcopy(Xp_new)
+    OscillatingHeatPipe._set_ξp!(sys_tube, Xp_new)
 
     u_tube_2 = newstate(sys_tube) # initialize OHP tube 
     integrator_tube_2 = init(u_tube_2,tspan,deepcopy(sys_tube)); # construct integrator_tube
 
     @test vaporMergingCondition(integrator_tube_2.u,integrator_tube_2.t,integrator_tube_2) == true
 
-#     # println("Before modifying Xp: ", sys_tube.liquid.Xp)
+#     # println("Before modifying Xp: ", OscillatingHeatPipe._ξp(sys_tube))
 #     # println("After modifying Xp: ", Xp_new)
 
 #     #   ### combine inner tube and plate together
@@ -331,7 +334,7 @@ end
 #     SimuResult = SimulationResult(integrator_tube,integrator_plate);
 
 
-#     # println(integrator_tube.p.liquid.Xp)
+#     # println(OscillatingHeatPipe._ξp(integrator_tube.p))
 
 
     p_old = deepcopy(integrator_tube.p)
@@ -345,8 +348,8 @@ end
 
     p_new = deepcopy(integrator_tube.p)
 
-    @test length(p_new.liquid.Xp) == length(p_old.liquid.Xp) - 1
-    @test isapprox(sum(ξ_to_liquid_length(first.(p_new.liquid.Xp), last.(p_new.liquid.Xp), p_new.tube.L)), sum(ξ_to_liquid_length(first.(p_old.liquid.Xp), last.(p_old.liquid.Xp), p_old.tube.L)), rtol=2e-3)
+    @test length(OscillatingHeatPipe._ξp(p_new)) == length(OscillatingHeatPipe._ξp(p_old)) - 1
+    @test isapprox(sum(ξ_to_liquid_length(first.(OscillatingHeatPipe._ξp(p_new)), last.(OscillatingHeatPipe._ξp(p_new)), p_new.tube.L)), sum(ξ_to_liquid_length(first.(OscillatingHeatPipe._ξp(p_old)), last.(OscillatingHeatPipe._ξp(p_old)), p_old.tube.L)), rtol=2e-3)
 
     Mvapor_new = sum(getMvapor(p_new))
     Mfilm_new = sum(sum.(getMfilm(p_new)))

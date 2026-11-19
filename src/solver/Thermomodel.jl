@@ -112,7 +112,6 @@ function _closed_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adepos
     v_liquid_right_final = [@view v_vapor_start_final[2:end];v_vapor_start_final[1]]
 
     # this looks like an implementation of the liquid momentum equation (6)
-    # needs update for new liquid / state vector to correct units
 
     # dζ/dt, volumetric flow rate
     # obtained by solving C
@@ -153,8 +152,8 @@ function dynamicsmodel(u::Array{Float64,1}, php_sys::UniformPhpSystem)
     #      m^3      m^3      m^3/s    kg      m^2        m^2        m                 m
 
     du = zeros(size(u))
-    # du/dt = [Q_L (n); Q_R (n); dQᵦdt (n); ṁ (n*); ]
-    #          m^3/s    m^3/s    m^3/s^2    kg/s
+    # du/dt = [Q_L (n); Q_R (n); dQᵦdt (n); ṁ (n*); Ȧf_L;  Ȧf_R;  L̇f_L; L̇f_R]
+    #          m^3/s    m^3/s    m^3/s^2    kg/s    m^2/s  m^2/s  m/s   m/s
 
     # extracts essential information stored at sys::UniformPhpSystem
     sys :: UniformPhpSystem = php_sys

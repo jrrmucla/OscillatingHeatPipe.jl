@@ -10,7 +10,7 @@ Return `(x, y, xf, yf, tube)` using the existing OHP centerline geometry.
 Successive channel rows alternate between `(Dh1, Pc1, Ac1)` and
 `(Dh2, Pc2, Ac2)`. Geometry knots mark only straightaway endpoints, so
 interpolation keeps each straightaway constant and transitions across bends.
-The `VariableTube` can be passed to `VariableAreaPhpSystem`.
+The `VariableTube` can be passed to `VariablePhpSystem`.
 
 For a closed loop, the extended final row and the transverse return use the
 second channel geometry; the final gap straight uses the first. Knot distances

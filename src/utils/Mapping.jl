@@ -327,9 +327,7 @@ end
 function slug_interp(sys::UniformPhpSystem)
         filmLend = sys.vapor.Lfilm_end
     filmLstart = sys.vapor.Lfilm_start
-    # Xpstart = [elem[1] for elem in sys.liquid.Xp]
-    # Xpend = [elem[2] for elem in sys.liquid.Xp]
-    Xpvapor = getXpvapor(sys.liquid.Xp,sys.tube.closedornot)
+    Xpvapor = getXpvapor(_ξp(sys),sys.tube.closedornot)
     Xvaporend = [elem[2] for elem in Xpvapor]
     Xvaporstart = [elem[1] for elem in Xpvapor]
     Xfilmstart = Xvaporstart .+ filmLstart
@@ -371,7 +369,7 @@ end
 # overloads to handle the different PHP systems
 
 tube_length(sys::UniformPhpSystem) = _tube_length(sys.tube)
-tube_length(sys::VariableAreaPhpSystem) = _tube_length(sys.tube)
+tube_length(sys::VariablePhpSystem) = _tube_length(sys.tube)
 tube_length(sys::PhpSystem_nomapping) = _tube_length(sys.tube)
 
 _film_heat_transfer(sys, film_area, positions) =

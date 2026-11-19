@@ -319,7 +319,7 @@ end
     
     tube_hist_t = SimuResult.tube_hist_t
     
-    Ptmp = tube_sys.mapping.P_interp_liquidtowall[tube_sys.wall.Xarray]
+    Ptmp = tube_sys.mapping.P_interp_liquidtowall.(tube_sys.wall.Xarray)
     
     # grid = SimuResult.grid
     grid = SimuResult.integrator_plate.p.base_cache.g
@@ -395,7 +395,7 @@ end
 
     Twall = SimuResult.tube_hist_θwall[i]
     Tref = (PtoT.(maximum(P)) + PtoT.(minimum(P)))/2
-    Tsat = PtoT(tube_sys.mapping.P_interp_liquidtowall[tube_sys.wall.Xarray])
+    Tsat = PtoT.(tube_sys.mapping.P_interp_liquidtowall.(tube_sys.wall.Xarray))
 
     ΔT = Twall - Tsat
 
@@ -540,8 +540,6 @@ end
     RTD_T = exp_data[2]
 
     
-    T0 = SimuResult.integrator_tube.u[end]
-    
     title := "temperature curve"
     linewidth := 2
 #     legend := :topleft
@@ -568,7 +566,7 @@ end
     thist = sensor_data[1]
     ghist = sensor_data[2]
     
-    T0 = SimuResult.integrator_tube.u[end]
+    T0 = mean(first(SimuResult.tube_hist_θwall))
     
     title --> "Temperature curve"
     linewidth := 2
@@ -599,8 +597,6 @@ end
     ghist = sensor_data[2]
     
     power = SimuResult.integrator_tube.p.wall.power
-    
-    T0 = SimuResult.integrator_tube.u[end]
     
     title := "Thermal conductance"
     linewidth := 2
@@ -634,8 +630,6 @@ end
     RTD = exp_data[2]
     
     power = SimuResult.integrator_tube.p.wall.power
-    
-    T0 = SimuResult.integrator_tube.u[end]
     
     title := "Thermal conductance"
     linewidth := 2
@@ -676,7 +670,7 @@ end
     Vmax_hist = []
     Vmin_hist = []
     for sysi in sysfinal
-        V = [elem[2] for elem in sysi.liquid.dXdt]
+        V = sysi.liquid.Q_B ./ sysi.tube.Ac
         Vabsavg = mean(abs.(V))
         Vavg = mean(V)
         Vmax = maximum((V))
@@ -826,7 +820,7 @@ end
             y2 = y2[1]
 
             @unpack PtoT = val.propconvert
-            y2 -= PtoT(val.mapping.P_interp_liquidtowall.(x2))
+            y2 -= PtoT.(val.mapping.P_interp_liquidtowall.(x2))
 
             # y2 -= nondi_PtoT(val.mapping.P_interp_liquidtowall.(x2))
 
@@ -860,12 +854,12 @@ end
 end
 
 function stackXpTemp(val::UniformPhpSystem)
-    Xpvapor = getXpvapor(val.liquid.Xp,val.tube.closedornot)
+    Xp = _ξp(val)
+    Xpvapor = getXpvapor(Xp,val.tube.closedornot)
     # θvapor  = nondi_PtoT.(val.vapor.P)
     
     @unpack PtoT = val.propconvert
     θvapor  = PtoT.(val.vapor.P)
-    Xp = val.liquid.Xp
 
     all_θ  = []
     all_Xp = []
@@ -875,13 +869,13 @@ function stackXpTemp(val::UniformPhpSystem)
     j=1
     while j <= length(Xp)
         if Xp[j][end] >= Xp[j][1]
-            push!(all_Xp,val.liquid.Xarrays[j]); push!(all_θ, val.liquid.θarrays[j])
+            push!(all_Xp,val.liquid.ξarrays[j]); push!(all_θ, val.liquid.θarrays[j])
             else
             # find the index at the end
-            index = findfirst(x->x <= val.liquid.Xarrays[j][end], val.liquid.Xarrays[j])
+            index = findfirst(x->x <= val.liquid.ξarrays[j][end], val.liquid.ξarrays[j])
 
-            push!(all_Xp,val.liquid.Xarrays[j][1:index-1]); push!(all_θ, val.liquid.θarrays[j][1:index-1])
-            push!(all_Xp,val.liquid.Xarrays[j][index:end]); push!(all_θ, val.liquid.θarrays[j][index:end])
+            push!(all_Xp,val.liquid.ξarrays[j][1:index-1]); push!(all_θ, val.liquid.θarrays[j][1:index-1])
+            push!(all_Xp,val.liquid.ξarrays[j][index:end]); push!(all_θ, val.liquid.θarrays[j][index:end])
         end
 
         j += 1

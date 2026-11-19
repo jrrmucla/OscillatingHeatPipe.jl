@@ -97,9 +97,9 @@ end
                                                     nucleatenum=250,
                                                     L_newbubble=6e-3,
                                                     ch_ratio=0.42,
-                                                    σcharge=0.01]) -> UniformPhpSystem or VariableAreaPhpSystem
+                                                    σcharge=0.01]) -> UniformPhpSystem or VariablePhpSystem
 
-Initialize a `UniformPhpSystem`, or a `VariableAreaPhpSystem` when given a
+Initialize a `UniformPhpSystem`, or a `VariablePhpSystem` when given a
 `VariableTube` through `tube=...`. Without a tube, construct the usual uniform
 tube from `d`, `tubeshape`, `g`, and `closedornot`. A supplied tube owns these
 properties; its point count and length must match the forcing shape. Variable
@@ -208,8 +208,8 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     boil_hist_int = []
     cache = Cache(boil_hist_int,totalmass)
 
-    # UniformPhpSystem
-    system_constructor = tube isa VariableTube ? VariableAreaPhpSystem : UniformPhpSystem
+    # UniformPhpSystem or VariablePhpSystem
+    system_constructor = tube isa VariableTube ? VariablePhpSystem : UniformPhpSystem
     sys0 = system_constructor(tube,liquids,vapors,wall,propconvert,mapping,cache);
 
     sys0
