@@ -1,7 +1,6 @@
 using Test
 using OscillatingHeatPipe
 using JLD2
-# needs update for new liquid / state vector
 
 @testset "Results IO" begin
     mktempdir() do dir

@@ -1,7 +1,6 @@
 using Test
 using Random
 using OscillatingHeatPipe
-# needs update for new liquid / state vector
 
 """
 Problem: For non-uniform tubes, the line source in the ILM problem doesn't contain non-uniform cross-section, 
@@ -54,7 +53,7 @@ and fail otherwise.
         @test supplied.liquid.Hₗ ≈ fluid.kₗ / supplied_uniform.Dh * ohp_module.DEFAULT_NU
 
         variable = initialize_ohpsys(substrate, fluid, 40.0; tube, slugnum=3, nucleatenum=2)
-        @test variable isa ohp_module.VariableAreaPhpSystem
+        @test variable isa ohp_module.VariablePhpSystem
         @test variable.tube === tube
         @test variable.tube.map_ξ_to_Ac !== nothing
         @test variable.cache.mass ≈ getMtotal(variable)
