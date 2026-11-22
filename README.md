@@ -1,6 +1,4 @@
 # OscillatingHeatPipe.jl
-This package is build upon [OscillatingHeatPipe.jl by Yuxuan Li](https://github.com/liyuxuan48/OscillatingHeatPipe.jl). Currently standalone until research is in an acceptable state to publish, at which time it could move to a fork.
-
 `OscillatingHeatPipe.jl` simulates an oscillating heat pipe (OHP) coupled to a two-dimensional heat-conduction plate. It provides tools for defining OHP channels, heaters, and condensers, initializing the tube and plate systems, time-marching the coupled problem, saving results, and post-processing temperatures, pressure, slug motion, and boiling statistics.
 
 ![Oscillating heat pipe animation](animation.gif)
