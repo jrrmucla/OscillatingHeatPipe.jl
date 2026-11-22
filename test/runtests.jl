@@ -1,13 +1,8 @@
-##using TestSetExtensions
 using OscillatingHeatPipe
 using Literate
 using Test
 
 const GROUP = get(ENV, "GROUP", "All")
-
-if GROUP == "All" || GROUP == "ResultsIO"
-    include("resultsio.jl")
-end
 
 ENV["GKSwstype"] = "nul" # removes GKS warnings during plotting
 
@@ -49,6 +44,7 @@ function use_stable_literate_sandbox!()
 end
 
 if GROUP == "All" || GROUP == "Auxiliary"
+    include("resultsio.jl")
     include("tube_geometry.jl")
     include("inner_coordinates.jl")
     include("liquid_lengths.jl")
@@ -70,7 +66,6 @@ if GROUP == "All" || GROUP == "Literate"
       global file_str = "$file"
       global body = :(begin include(joinpath($root,$file)) end)
       endswith(file,".jl") && startswith(file,"OHP DIY.jl") && @mysafetestset file_str body
-      #endswith(file,".jl") && @mysafetestset file_str body
     end
   end
 end
@@ -80,7 +75,6 @@ if GROUP == "Notebooks"
   use_stable_literate_sandbox!()
   for (root, dirs, files) in walkdir(litdir)
     for file in sort(files)
-      # endswith(file,".jl") && startswith(file,"OHP DIY.jl") && Literate.notebook(joinpath(root, file),notebookdir)
       endswith(file,".jl") && Literate.notebook(joinpath(root, file),notebookdir; execute=true)
     end
   end

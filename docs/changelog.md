@@ -1,4 +1,4 @@
-# 2.0.0
+# 0.2.0
 
 - Breaks backwards compatibility, but hopefully a useful starting point for development of systems with cross sections that vary along their length.
 - Changes the mechanical state vector from `[Xp; dXdt; M; δstart; δend; Lfilm_start; Lfilm_end]` to `[ζ_L; ζ_R; Q_B; M; Af_L; Af_R; Lfilm_start; Lfilm_end]`.
