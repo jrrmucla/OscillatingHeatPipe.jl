@@ -1,4 +1,4 @@
-using OscillatingHeatPipe
+﻿using OscillatingHeatPipe
 using Literate
 using Test
 
@@ -53,6 +53,11 @@ if GROUP == "All" || GROUP == "Auxiliary"
     include("film_interfaces.jl")
     include("initialization.jl")
     include("preprocessing.jl")
+    include("liquidmodel.jl")
+    include("plate_fixture.jl")
+    include("system_fixture.jl")
+    include("fixtures.jl")
+    include("dynamics_parity.jl")
     include("thermomodel.jl")
     include("correlations.jl")
     include("integrator.jl")

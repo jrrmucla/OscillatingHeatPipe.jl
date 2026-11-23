@@ -2,11 +2,11 @@ export UniformTube
 
 """
 UniformTube is a struct containing tube geometries
-    Dh          ::Float64   hydraulic diameter
-    Pc          ::Float64   channel perimeter (may be an arbitrary shape so cannot be derived from d)
-    Ac          ::Float64   cross-sectional area
-    L           ::Float64   tube one dimensional length
-    g           ::Float64   gravity vector along the plate
+    Dh          ::Float64   hydraulic diameter   [m]
+    Pc          ::Float64   channel perimeter    [m] (may be an arbitrary shape so cannot be derived from d)
+    Ac          ::Float64   cross-sectional area [m^2]
+    L           ::Float64   tube length          [m]
+    g           ::Float64   gravity vector       [J/kg] (in plate coordinates)
     closedornot ::Bool      if the tube is closed loop or not (open loop)
 """
 struct UniformTube

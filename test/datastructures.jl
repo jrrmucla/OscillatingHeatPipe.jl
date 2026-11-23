@@ -1,4 +1,4 @@
-using Statistics
+﻿using Statistics
 using Test
 using OscillatingHeatPipe
 
@@ -170,14 +170,7 @@ phys_params["adiabatic_coeff"] = 0.0
 phys_params["ohp_flux"] = [0.0]
 forcing_dict = Dict("heating models" => [heater1,cond1,cond2,ohp_linesource])
 
-prob = NeumannHeatConductionProblem(g,body,scaling=GridScaling,
-                                             phys_params=phys_params,
-                                             bc=bcdict,
-                                             motions=m,
-                                             forcing=forcing_dict,
-                                             timestep_func=timestep_fixed)
-
-sys_plate = construct_system(prob)
+sys_plate = _construct_plate_fixture(; phys_params, forcing=forcing_dict)
 
 
 
@@ -192,7 +185,7 @@ end
 
     tspan = (0.0, 1.0)
 
-    sys_plate = construct_system(prob)
+    sys_plate = _construct_plate_fixture(; phys_params, forcing=forcing_dict)
     u_plate = init_sol(sys_plate) # initialize plate T field to uniform Tref
     integrator_plate = init(u_plate,tspan,sys_plate) # construct integrator_plate
 
@@ -231,7 +224,7 @@ end
 # =========================================================================================
     phys_params["areaheater_coeff"] = 4000.0
     phys_params["areaheater_temp"] = -1.0
-    sys_plate = construct_system(prob)
+    sys_plate = _construct_plate_fixture(; phys_params, forcing=forcing_dict)
     u_plate = init_sol(sys_plate) # initialize plate T field to uniform Tref
     integrator_plate = init(u_plate,tspan,sys_plate) # construct integrator_plate
 
@@ -271,7 +264,7 @@ end
     phys_params["adiabatic_coeff"] = 400.0
     phys_params["areaheater_temp"] = -1.0
 
-    sys_plate = construct_system(prob)
+    sys_plate = _construct_plate_fixture(; phys_params, forcing=forcing_dict)
     u_plate = init_sol(sys_plate) # initialize plate T field to uniform Tref
     integrator_plate = init(u_plate,tspan,sys_plate) # construct integrator_plate
 
@@ -310,7 +303,7 @@ end
     phys_params["ohp_flux"] = [-q1D_value] # W/m^2
     # test energy rise/drop for one step with small heater and line source
 
-    sys_plate = construct_system(prob)
+    sys_plate = _construct_plate_fixture(; phys_params, forcing=forcing_dict)
     u_plate = init_sol(sys_plate) # initialize plate T field to uniform Tref
     integrator_plate = init(u_plate,tspan,sys_plate) # construct integrator_plate
 
@@ -337,25 +330,6 @@ end
                                                  
 end
 
-# reset phys_params
-phys_params = Dict( "diffusivity"              => αₛ,
-                    "flux_correction"          => ρₛ*cₛ*dₛ,
-                    "Fourier"                  => 1.0,
-                    "ohp_flux"                 => [NaN], # initial value, the value here is useless
-                    "areaheater_power"         => power, # total power
-                    "areaheater_area"          => areaheater_area, # total area
-                    "areaheater_temp"          => 0.0,   # relative temperature compared with "background temperature"
-                    "areaheater_coeff"         => hc,
-                    "adiabatic_coeff"          => h_adiabatic,
-                    "background temperature"   => Tref
-                     )
-
-prob = NeumannHeatConductionProblem(g,body,scaling=GridScaling,
-                                             phys_params=phys_params,
-                                             bc=bcdict,
-                                             motions=m,
-                                             forcing=forcing_dict,
-                                             # timestep_func=timestep_fourier
-                                             timestep_func=timestep_fixed)
-
-sys_plate = construct_system(prob)
+# Restore defaults.
+sys_plate = get_powered_plate_fixture()
+phys_params = deepcopy(sys_plate.phys_params)

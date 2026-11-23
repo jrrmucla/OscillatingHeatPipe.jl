@@ -1,4 +1,4 @@
-export dMdtdynamicsmodel,dynamicsmodel_steadyfilm,wallmodel,liquidmodel,dynamicsmodel,sys_to_heatflux,sys_to_Harray,integrator_to_heatflux,integrator_to_Harray
+export dMdtdynamicsmodel,dynamicsmodel_steadyfilm,wallmodel,dynamicsmodel,sys_to_heatflux,sys_to_Harray,integrator_to_heatflux,integrator_to_Harray
 
 function _open_tube_dynamics(du, liquid_velocity, sys, numofliquidslug, Adeposit_left, Adeposit_right,
     Ac, liquid_length, Xpvapor, ρₗ, Eratio_plus, Eratio_minus,
@@ -396,56 +396,6 @@ function dMdtdynamicsmodel(Xpvapor::Array{Tuple{Float64,Float64},1},sys::Uniform
 
         return dMdt_latent_start,dMdt_latent_end,dMdt_latent_start_positive,dMdt_latent_end_positive
 end
-
-"""
-    Models thermal energy within liquid slugs.
-    Reference: (9) Yuxuan 2024
-"""
-function liquidmodel(p::UniformPhpSystem)
-    @unpack θarrays,ξarrays,Hₗ,αₗ,Cpₗ,ρₗ = p.liquid
-    @unpack Ac,L,Pc = p.tube
-    @unpack θ_interp_walltoliquid = p.mapping
-
-    du = 0 .* θarrays
-
-    H_rhs = Pc / (ρₗ*Cpₗ*Ac)
-
-    for i in eachindex(θarrays)
-        
-        xs = ξarrays[i];
-        dx = mod(xs[end] - xs[1], L) / (length(xs)-1) ## two nodes are at the boundary so need to minus 1 for distance
-
-        fx = map(θ_interp_walltoliquid, xs) - θarrays[i]
-        du[i] = αₗ .* laplacian(θarrays[i]) ./ dx ./ dx + Hₗ .* fx .* H_rhs
-    end
-
-    return du
-end
-
-
-"""
-    This is a function to get the laplacian of a vector field u
-
-    For now zero-gradient boundary condition is used.
-
-    u    ::  an array
-"""
-function laplacian(u::Vector{Float64})
-    unew = zeros(size(u))
-
-    dl = ones(length(u)-1)
-    dr = dl
-    d  = -2*ones(length(u))
-    d[1] = -1
-    d[end]= -1
-
-    A = Tridiagonal(dl, d, dr)
-
-    unew = A*u
-
-    return (unew)
-end
-
 
 # q'
 function sys_to_heatflux(p::UniformPhpSystem)

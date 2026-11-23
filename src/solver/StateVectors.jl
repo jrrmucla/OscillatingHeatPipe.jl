@@ -81,14 +81,11 @@ function wallθtovec(θwall::Vector{Float64})
     return [SEPERATION_VAR; θwall]
 end
 
-function newstate(sys0::UniformPhpSystem)
+function newstate(sys0::AbstractPHP)
     @unpack ζ_L, ζ_R, Q_B = sys0.liquid
     @unpack Af_L,Af_R,Lfilm_start,Lfilm_end,P = sys0.vapor
-    @unpack PtoD = sys0.propconvert
-
-    M = systoM(sys0::UniformPhpSystem)
-
-    u=[ζMAL_to_u(ζ_L,ζ_R,Q_B,M,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
+    mᵥ = getMvapor(sys0)
+    u=[ζMAL_to_u(ζ_L,ζ_R,Q_B,mᵥ,Af_L,Af_R,Lfilm_start,Lfilm_end); liquidθtovec(sys0.liquid.θarrays)];
 end
 
 """

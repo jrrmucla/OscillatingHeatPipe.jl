@@ -68,7 +68,7 @@ end
 """
 give d and shape of tube, return perimeter and cross-section area
 """
-function peri_Ac(d::Float64,tubeshape::String)
+function Pc_Ac(d::Float64,tubeshape::String)
     if tubeshape=="square"
         peri = d*4
         Ac = d*d
@@ -137,7 +137,7 @@ function initialize_ohpsys(sys::ILMSystem,p_fluid,power;closedornot=DEFAULT_CLOS
     L = arclength(ohp.shape)
     N = numpts(ohp.shape)
     if tube === nothing
-        peri, Ac = peri_Ac(d, tubeshape)
+        peri, Ac = Pc_Ac(d, tubeshape)
         tube = UniformTube(d, peri, Ac, L, g, closedornot, N)
     else
         _verify_tube_forcing_alignment(tube, ohp.shape)

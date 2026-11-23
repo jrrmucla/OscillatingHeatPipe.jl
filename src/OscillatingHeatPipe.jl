@@ -34,6 +34,7 @@ include("utils/Plotrecipe.jl")
 
 include("solver/CommonDynamics.jl")
 include("solver/Thermomodel.jl")
+include("solver/NonuniformDynamics.jl")
 include("solver/Tools.jl")
 include("solver/Timemarching.jl")
 

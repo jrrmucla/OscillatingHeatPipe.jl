@@ -1,4 +1,4 @@
-export Af_at_interfaces
+export Af_at_interfaces, liquidmodel
 
 """
     Calculate the area of newly deposited films at each of the liquid interfaces.
@@ -38,4 +38,77 @@ function δf_new_at_interfaces(sys::Union{UniformPhpSystem, VariablePhpSystem}, 
     δs_left = Catoδ.(Dh(sys.tube, liquid_ξs_left), Ca_mean; adjust_factor=sys.vapor.ad_fac)
     δs_right = Catoδ.(Dh(sys.tube, liquid_ξs_right), Ca_mean; adjust_factor=sys.vapor.ad_fac)
     return δs_left, δs_right
+end
+
+"""
+    liquidmodel(sys::Union{UniformPhpSystem, VariablePhpSystem})
+
+Model conduction & convection within liquid slugs (equation (9), Yuxuan 2024).
+
+Physical assumptions:
+- Internal temperature points are evenly spaced
+- Convection coefficient is the same constant for all slugs
+"""
+function liquidmodel(sys::Union{UniformPhpSystem, VariablePhpSystem})
+    @unpack θarrays,ξarrays,Hₗ,αₗ,Cpₗ,ρₗ = sys.liquid
+    @unpack θ_interp_walltoliquid = sys.mapping
+    Lt = _tube_length(sys.tube)
+
+    du = 0 .* θarrays
+
+    kₗ = αₗ * ρₗ * Cpₗ
+
+    for i in eachindex(θarrays)
+        ξs = ξarrays[i]
+        dξs = mod.(diff(ξs), Lt)
+        Δξ = sum(dξs) / length(dξs)
+        
+        # TODO remove once the 
+        # meshing of non-uniform nodes is done
+        _verify_spacing_is_uniform(dξs, Lt)
+
+        ΔΘs = map(θ_interp_walltoliquid, ξs) - θarrays[i]
+
+        areas = Ac(sys.tube, ξs)
+        perimeters = Pc(sys.tube, ξs)
+
+        LHS_unsteady_term_scaling = ρₗ .* Cpₗ .* areas
+        RHS_conduction = kₗ .* areas .* laplacian(θarrays[i]) ./ Δξ ./ Δξ
+        RHS_convection = perimeters .* Hₗ .* ΔΘs
+
+        du[i] = (RHS_conduction + RHS_convection) ./ LHS_unsteady_term_scaling
+    end
+
+    return du
+end
+
+function _verify_spacing_is_uniform(dξs, Lt::Real)
+    dξm = sum(dξs) / length(dξs)
+    all(Δξ -> isfinite(Δξ) && Δξ > 0 &&
+        isapprox(Δξ, dξm; rtol=sqrt(eps(Float64)), atol=16eps(Float64)*Lt), dξs) ||
+        throw(ArgumentError("liquid slugs require uniformly spaced spatial nodes"))
+    return nothing
+end
+
+"""
+    This is a function to get the laplacian of a vector field u
+
+    For now zero-gradient boundary condition is used.
+
+    u    ::  an array
+"""
+function laplacian(u::Vector{Float64})
+    unew = zeros(size(u))
+
+    dl = ones(length(u)-1)
+    dr = dl
+    d  = -2*ones(length(u))
+    d[1] = -1
+    d[end]= -1
+
+    A = Tridiagonal(dl, d, dr)
+
+    unew = A*u
+
+    return (unew)
 end

@@ -2,7 +2,7 @@ export getgvec,getgh,delta, # get actrual heightg of the tube
 ξ_to_vapor_length,ξ_to_liquid_length,ζ_to_vapor_volume,ζ_to_liquid_volume,getXpvapor, # transfer Xp to the length of vapors, length of liquids, and Xp for vapor.
 # ifamong,constructXarrays,
 Hfilm,getδarea,getδFromδarea,getMvapor,getMfilm,getMliquid,getMtotal,getchargeratio,get_vapor_volume,
-getCa,f_churchill,Catoδ,RntoΔT,systoM
+getCa,f_churchill,Catoδ,RntoΔT
 
 # typing of NamedTuple as an alternative to AbstractPHP
 # is to allow for unit tests with minimal PHP-like tuples
@@ -408,10 +408,10 @@ function RntoΔT(Rn,Tavg,fluid_type,d,TtoP)
 end
 
 """
-    systoM(sys::UniformPhpSystem)
+    systoM(sys::AbstractPHP)
 
 Given tube system `sys`, return the masses of the vapor regions.
 """
-function systoM(sys0::UniformPhpSystem)
+function systoM(sys0::AbstractPHP)
     return getMvapor(sys0)
 end
